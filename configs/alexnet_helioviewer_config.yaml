@@ -1,0 +1,4 @@
+data:
+  input_path: /home/jhong36/data/hetero_data/hmi/compressed/mag
+  input_time_delta: [-60, 0]
+  input_stat_path: ../assets/log_mag_stat.yaml
