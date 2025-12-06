@@ -1,4 +1,5 @@
 import os
+import hydra
 import numpy as np
 import pandas as pd
 
@@ -56,11 +57,11 @@ class FlareHelioviewerDataset(Dataset):
 
         return (log_data - self.stats.mean) / self.stats.std
 
-
-if __name__ == "__main__":
-
-    cfg = OmegaConf.load("../../configs/alexnet_helioviewer_config.yaml")
-
+@hydra.main(
+    config_path="../../configs/", 
+    config_name="alexnet_helioviewer_config.yaml"
+)
+def main(cfg):
     dataset = FlareHelioviewerDataset(
         input_path=cfg.data.input_path,
         input_time_delta=cfg.data.input_time_delta,
@@ -68,3 +69,7 @@ if __name__ == "__main__":
         phase="training",
     )
 
+
+if __name__ == "__main__":
+
+    main()

@@ -1,4 +1,12 @@
+hydra:
+  run:
+    dir: .
+
 data:
-  input_path: /home/jhong36/data/hetero_data/hmi/compressed/mag
+  repo: nasa-ibm-ai4science/surya-bench-flare-forecasting
+  input: 
+    path: /home/jhong36/data/hetero_data/hmi/compressed/mag
+    ext: jpg
+  index_file_path: ../../data
   input_time_delta: [-60, 0]
-  input_stat_path: ../assets/log_mag_stat.yaml
+  input_stat_path: ../../assets/log_mag_stat.yaml
