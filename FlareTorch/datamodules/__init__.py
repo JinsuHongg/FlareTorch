@@ -1,0 +1,1 @@
+from .flare import FlareHelioviewerDataModule

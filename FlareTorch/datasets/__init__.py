@@ -1,0 +1,1 @@
+from .flare_magnetogram import FlareHelioviewerDataset
