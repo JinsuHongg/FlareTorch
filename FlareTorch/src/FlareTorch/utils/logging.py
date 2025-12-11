@@ -1,4 +1,5 @@
 import datetime
+from omegaconf import OmegaConf
 from lightning.pytorch.loggers import WandbLogger
 
 
@@ -15,7 +16,7 @@ def build_wandb(cfg, model):
         notes=cfg["wandb"]["notes"],
         tags=cfg["wandb"]["tag"],
         name=name,
-        config=cfg
+        config=OmegaConf.to_container(cfg, resolve=True, throw_on_missing=True)
     )
 
     # # selected hparams for WandB

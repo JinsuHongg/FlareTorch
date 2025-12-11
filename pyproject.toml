@@ -13,3 +13,6 @@ dependencies = [
     "terratorch-surya>=0.1.0",
     "transformers>=4.36.0", 
 ]
+
+[tool.setuptools.packages.find]
+where = ["src"]

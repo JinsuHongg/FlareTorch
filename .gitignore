@@ -3,6 +3,8 @@ data/
 outputs/
 .hydra/
 .csv
+wandb/
+assets/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

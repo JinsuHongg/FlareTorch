@@ -1,0 +1,13 @@
+[project]
+name = "FlareTorch"
+version = "0.1.0"
+
+authors = [
+            {name="Jinsu Hong", email="jinsuhong.knight@gmail.com"},
+            ]
+            
+dependencies = [
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]

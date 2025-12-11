@@ -6,20 +6,13 @@ from loguru import logger as lgr_logger
 from ..datasets import FlareHelioviewerDataset
 
 
-def load_config(config_path):
-    with open(config_path, "r") as f:
-        cfg = OmegaConf.load(f)
-    lgr_logger.info(f"Loaded config from {config_path}")
-    return cfg
-
-
 class FlareHelioviewerDataModule(L.LightningDataModule):
     def __init__(
         self,
-        config_path: str
+        cfg: str
     ):
         super().__init__()
-        self.cfg = load_config(config_path)
+        self.cfg = cfg
 
     def get_dataset(self, phase, index_path):
         return FlareHelioviewerDataset(

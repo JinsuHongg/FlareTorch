@@ -32,14 +32,13 @@ data:
 
 model:
   type: resnet34
-  pretrained_weights_path: ../../assets/check_point
+  pretrained_weights_path: null #../../assets/check_point
   num_forwards: 100
-  
-
+  p_drop: 0.5
   resnet34:
     in_channels: 1
     time_steps: 1
-  
+    
   loss:
     type: mse
 
