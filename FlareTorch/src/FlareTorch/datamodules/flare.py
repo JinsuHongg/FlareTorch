@@ -1,3 +1,4 @@
+import os
 import lightning as L
 from torch.utils.data import DataLoader
 
@@ -33,27 +34,35 @@ class FlareHelioviewerDataModule(L.LightningDataModule):
         if stage in (None, "fit"):
             self.train_ds = self.get_dataset(
                 "train",
-                self.cfg.data.input_path.train
+                os.path.join(
+                    self.cfg.data.index.path,
+                    self.cfg.data.index.train)
                 )
 
         # Assign validation dataset for use in dataloader(s)
         if stage in ("fit", "validate", None):
             self.val_ds = self.get_dataset(
                 "validation",
-                self.cfg.data.input_path.val
+                os.path.join(
+                    self.cfg.data.index.path,
+                    self.cfg.data.index.val)
                 )
         
         # Assign test dataset for use in dataloader(s)
         if stage in (None, "test"):
             self.test_ds = self.get_dataset(
                 "test",
-                self.cfg.data.input_path.test
+                os.path.join(
+                    self.cfg.data.index.path,
+                    self.cfg.data.index.test)
                 )
 
         if stage in (None, "predict"):
             self.pred_ds = self.get_dataset(
                 "test",
-                self.cfg.data.input_path.test
+                os.path.join(
+                    self.cfg.data.index.path,
+                    self.cfg.data.index.test)
                 )
 
     def train_dataloader(self):

@@ -42,8 +42,8 @@ def merge_dataframe(left, right, key="timestamp", how="inner"):
 
 
 @hydra.main(
-    config_path="../../configs/", 
-    config_name="alexnet_helioviewer_config.yaml"
+    config_path="../../../configs/", 
+    config_name="resnet_helioviewer_config.yaml"
 )
 def main(cfg):
 
@@ -60,16 +60,15 @@ def main(cfg):
         file_ext=cfg.data.input.ext
         )
     
-    # merge two dataframe
     df_train = merge_dataframe(df_input, df_train)
     df_val = merge_dataframe(df_input, df_val)
     df_val_leaky = merge_dataframe(df_input, df_val_leaky)
     df_test = merge_dataframe(df_input, df_test)
-    df_val = pd.concat([df_val, df_val_leaky], axis=0)
 
-    df_train.to_csv(cfg.data.index_file_path + "/train.csv", index=False)
-    df_val.to_csv(cfg.data.index_file_path + "/validation.csv", index=False)
-    df_test.to_csv(cfg.data.index_file_path + "/test.csv", index=False)
+    df_train.to_csv(cfg.data.index.path + "train.csv", index=False)
+    df_val_leaky.to_csv(cfg.data.index.path + "leaky_validation.csv", index=False)
+    df_val.to_csv(cfg.data.index.path + "validation.csv", index=False)
+    df_test.to_csv(cfg.data.index.path + "test.csv", index=False)
 
 
 if __name__ == "__main__":

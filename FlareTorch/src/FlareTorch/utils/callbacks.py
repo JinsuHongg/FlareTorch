@@ -8,7 +8,7 @@ from lightning.pytorch.callbacks import (
 def build_callbacks(cfg, wandb_logger):
     ckpt_name = (
         f"{wandb_logger.experiment.id}_"
-        f"{cfg['experimentt']['ckpt_file_name']}_"
+        f"{cfg['experiment']['ckpt_file_name']}_"
         "{epoch}-{val_loss:.4f}"
     )
 
@@ -17,9 +17,10 @@ def build_callbacks(cfg, wandb_logger):
         LearningRateMonitor(logging_interval="step"),
         ModelCheckpoint(
             monitor=cfg["scheduler"]["monitor"],
-            dirpath=cfg["model"]["pretrained_weights_path"],
+            dirpath=cfg["model"]["save_ckpt_path"],
             filename=ckpt_name,
             save_top_k=3,
+            save_last=True,
             verbose=True,
             mode="min",
         ),

@@ -57,7 +57,7 @@ class FlareHelioviewerDataset(Dataset):
             for dt in self.input_time_delta
         ]
         
-        # 2. Load and stack all images
+        # Load and stack all images
         images = []
         for t in required_times:
             # We know 't' exists because of _get_valid_indices validation
@@ -65,12 +65,13 @@ class FlareHelioviewerDataset(Dataset):
             img = read_image(img_path)
             images.append(self.transform(img))
             
-        # 3. Stack along the first dimension (C, H, W) -> (Num_Frames, C, H, W)
-        x = torch.cat(images, dim=0) 
+        # Stack along the first dimension (C, H, W) -> (Num_Frames, C, H, W)
+        x = torch.stack(images, dim=1)
+        x = x.float()
         
         target = self.mapping_target(self.index.loc[current_time, self.label_type])
         
-        return x, torch.tensor(target, dtype=torch.float32)
+        return x, torch.tensor(target, dtype=torch.float32), current_time.value
 
     def _get_valid_indices(self):
         time_deltas = pd.to_timedelta(self.input_time_delta, unit="min")
@@ -94,30 +95,32 @@ class FlareHelioviewerDataset(Dataset):
         return shift/self.scaler_div
     
     def mapping_target(self, target):
-        match self.task:
-            case "regression": 
-                target = target.strip().upper()
-                
-                if target.startswith("F"):
-                    return self.transform_target(1e-9)
-                
-                sub_class = float(target[1:])
-                major_class = str(target[0])
-                mapping_dict = {
-                    "A": 1e-8,
-                    "B": 1e-7,
-                    "C": 1e-6,
-                    "M": 1e-5,
-                    "X": 1e-4
-                }
 
-                base_flux = mapping_dict.get(major_class)
-                if base_flux is None:
-                    raise ValueError(f"Unknown flare class: {major_class}")
-                
-                match self.label_type:
-                    case "max_goes_class":
-                        return self.transform_target(sub_class * base_flux)
+        if self.task == "regression" and self.label_type == "max_goes_class":
+
+            target = target.strip().upper()
+            
+            if target.startswith("F"):
+                return self.transform_target(1e-9)
+            
+            sub_class = float(target[1:])
+            major_class = str(target[0])
+            mapping_dict = {
+                "A": 1e-8,
+                "B": 1e-7,
+                "C": 1e-6,
+                "M": 1e-5,
+                "X": 1e-4
+            }
+
+            base_flux = mapping_dict.get(major_class)
+            if base_flux is None:
+                raise ValueError(f"Unknown flare class: {major_class}")
+            
+            flux = sub_class * base_flux
+            if flux <= 0.0:
+                return self.transform_target(1e-9)
+            return self.transform_target(flux)
                     
     def transform_target(self, target):
 

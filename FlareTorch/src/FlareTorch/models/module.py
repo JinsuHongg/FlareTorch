@@ -1,16 +1,17 @@
 import torch
 import torch.nn as nn
+from torchmetrics.regression import R2Score
 from terratorch_surya.downstream_examples.solar_flare_forecasting.models import ResNet34Classifier
 
 from .base import BaseModule
+from ..utils.losses import PinballLoss
 
 
-class ResNet34MCP(BaseModule):
+class ResNet34MCD(BaseModule):
     def __init__(
             self,
             model_type,
-            num_forwards,
-            p_drop,
+            module_dict,
             base_model_dict,
             loss_type,
             optimizer_dict,
@@ -21,7 +22,7 @@ class ResNet34MCP(BaseModule):
             scheduler_dict=scheduler_dict
         )
         self.save_hyperparameters()
-        self.num_forwards = num_forwards
+        self.num_forwards = module_dict.get("num_forwards", 100)
         
         match model_type:
             case "resnet34":
@@ -29,12 +30,15 @@ class ResNet34MCP(BaseModule):
                     in_channels=base_model_dict.in_channels,
                     time_steps=base_model_dict.time_steps,
                     num_classes=1,
-                    dropout=p_drop,
+                    dropout=base_model_dict.p_drop,
                 )
 
         match loss_type:
             case "mse":
                 self.loss_fn = nn.MSELoss()
+        
+        self.train_r2 = R2Score()
+        self.val_r2 = R2Score()
 
     def forward(self, x):
         # Standard forward pass
@@ -45,7 +49,7 @@ class ResNet34MCP(BaseModule):
         Custom prediction step for MC Dropout.
         This runs automatically when you call trainer.predict()
         """
-        x, _ = batch
+        x, _, timestamps = batch
         
         # Enable Dropout manually
         self.base_model.train() 
@@ -78,16 +82,72 @@ class ResNet34MCP(BaseModule):
 
     def training_step(self, batch, batch_idx):
         # Standard training loop
-        x, y = batch
+        x, y, timestamps = batch
         y_hat = self(x)
         loss = self.loss_fn(y_hat.squeeze(), y)
-        self.log('train_loss', loss)
+        self.train_r2(y_hat, y)
+        self.log('train_loss', loss, prog_bar=True, sync_dist=True)
+        self.log('train_r2', self.train_r2, on_step=False, on_epoch=True, prog_bar=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
-        # Standard validation
-        self.base_model.eval() 
-        x, y = batch
+        x, y, timestamps = batch
         y_hat = self(x)
         loss = self.loss_fn(y_hat.squeeze(), y)
-        self.log('val_loss', loss)
+        self.val_r2(y_hat, y)
+        self.log('val_loss', loss, prog_bar=True, sync_dist=True)
+        self.log('val_r2', self.val_r2, on_step=False, on_epoch=True, prog_bar=True)
+
+
+class ResNet34QR(BaseModule):
+    def __init__(
+            self, 
+            model_type,
+            base_model_dict,
+            optimizer_dict,
+            scheduler_dict,
+            module_dict,
+            ):
+        super().__init__(
+            optimizer_dict=optimizer_dict,
+            scheduler_dict=scheduler_dict
+        )
+        self.save_hyperparameters()
+        self.quantiles = module_dict.get("quantiles", [0.025, 0.5, 0.975])
+        
+        # Initialize Loss
+        self.loss_fn = PinballLoss(quantiles=self.quantiles)
+        
+        match model_type:
+            case "resnet34":
+                self.base_model = ResNet34Classifier(
+                    in_channels=base_model_dict.in_channels,
+                    time_steps=base_model_dict.time_steps,
+                    num_classes=len(self.quantiles),
+                    dropout=base_model_dict.p_drop,
+                )
+
+    def forward(self, x):
+        return self.base_model(x)
+
+    def training_step(self, batch, batch_idx):
+        x, y, _ = batch
+        preds = self(x) 
+        loss = self.loss_fn(preds, y)
+        self.log('train_loss', loss, prog_bar=True, sync_dist=True)
+        return loss
+    
+    def validation_step(self, batch, batch_idx):
+        # Lightning sets .eval() automatically here
+        x, y, _ = batch
+        preds = self(x)
+        loss = self.loss_fn(preds, y)
+        self.log('val_loss', loss, prog_bar=True, sync_dist=True)
+        return loss
+
+    def predict_step(self, batch, batch_idx):
+        x, _, _ = batch
+        preds = self(x)
+        
+        # Dynamic return based on your config
+        return {str(q): preds[:, i] for i, q in enumerate(self.quantiles)}

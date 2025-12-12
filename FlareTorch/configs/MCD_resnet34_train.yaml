@@ -9,42 +9,51 @@ experiment:
 data:
   repo: nasa-ibm-ai4science/surya-bench-flare-forecasting
   ref_mask_img: HMI-Mag.2010.12.06_07.00.00.jpg
-  index_path:
-    train: ../../data/train.csv
-    val: ../../data/validation.csv
-    test: ../../data/test.csv
+  index:
+    path: ../../assets/data/
+    train: train.csv
+    val: validation.csv
+    test: test.csv
   input:
-    path: /home/jhong36/data/hetero_data/hmi/compressed/mag
+    path: /anvil/scratch/x-jhong6/data/mag
     ext: jpg
     dim: 512
-  index_file_path: ../../data
+  index_file_path: ../../assets/data
   input_time_delta: [0] #[-60, 0]
-  input_stat_path: ../../data/los_mag_stat.yaml
+  input_stat_path: ../../assets/data/los_mag_stat.yaml
   label_type: max_goes_class
-  limb_mask_path: ../../data/limb_mask.npy
+  limb_mask_path: ../../assets/data/limb_mask.npy
   scaler_mul: 1
   scaler_shift: -127.5
   scaler_div: 127.5
   # for dataloader
   num_workers: 2
-  batch_size: 32
+  batch_size: 256
   pin_memory: false
 
 model:
+  save_ckpt_path: ../../assets/check_point/mcd/
+  ckpt: null
+  module_type: "mcd" # mcd, qr
+  # module specific
+  mcp:
+    num_forwards: 100
+  qr:
+    quantiles: [0.025, 0.5, 0.975]
+  
+  # base model
   type: resnet34
-  pretrained_weights_path: null #../../assets/check_point
-  num_forwards: 100
-  p_drop: 0.5
   resnet34:
     in_channels: 1
     time_steps: 1
+    p_drop: 0.5
     
   loss:
     type: mse
 
 optimizer:
   type: adamw
-  lr: 0.00001
+  lr: 5e-5
   weight_decay: 0.01
 
 scheduler:
@@ -70,12 +79,16 @@ trainer:
   limit_val_batches: 1500
   strategy: auto
 
+cp:
+  score_type: l1
+  alpha: 0.05
+
 wandb:
   save_dir: ../../assets
   entity: gsu-dmlab
   project: uncertainty-flare-regression
   log_model: false
   notes: "Resnet34 backbone and MCP"
-  offline: false
+  offline: true
   save_code: false
   tag: ["resnet34", "mcp", "regression"] # backbone model, head type, task

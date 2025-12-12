@@ -1,4 +1,5 @@
-import argparse
+# import argparse
+import os
 import hydra
 from loguru import logger as lgr_logger
 from omegaconf import OmegaConf
@@ -7,7 +8,7 @@ import torch
 from lightning.pytorch import Trainer
 
 from FlareTorch.datamodules import FlareHelioviewerDataModule
-from FlareTorch.models import ResNet34MCP
+from FlareTorch.models import ResNet34MCD, ResNet34QR
 from FlareTorch.utils import build_wandb, build_callbacks
 
 torch.set_float32_matmul_precision('medium')
@@ -21,22 +22,32 @@ def load_config(config_path):
 
 
 def build_model(cfg):
+    module_type = cfg.model.module_type
 
-    return ResNet34MCP(
-        model_type=cfg.model.type,
-        num_forwards=cfg.model.num_forwards,
-        p_drop=cfg.model.p_drop,
-        base_model_dict=cfg.model.get(cfg.model.type, "resnet34"),
-        loss_type=cfg.model.loss.type,
-        optimizer_dict=cfg.optimizer,
-        scheduler_dict=cfg.scheduler,
-    )
+    if module_type == "mcd":
+        return ResNet34MCD(
+            model_type=cfg.model.type,
+            module_dict=cfg.model.get(cfg.model.module_type),
+            base_model_dict=cfg.model.get(cfg.model.type, "resnet34"),
+            loss_type=cfg.model.loss.type,
+            optimizer_dict=cfg.optimizer,
+            scheduler_dict=cfg.scheduler,
+        )
+    
+    elif module_type == "qr":
+        return ResNet34QR(
+            model_type=cfg.model.type,
+            module_dict=cfg.model.get(cfg.model.module_type),
+            base_model_dict=cfg.model.get(cfg.model.type, "resnet34"),
+            optimizer_dict=cfg.optimizer,
+            scheduler_dict=cfg.scheduler,
+        )
+
 
 @hydra.main(
     config_path="../../../configs",
     config_name="resnet_helioviewer_config.yaml",
-    version_base=None,
-)
+    version_base=None)
 def train(cfg):
 
     # Datamodule
@@ -45,12 +56,7 @@ def train(cfg):
     )
 
     # Load model
-    if cfg.model.pretrained_weights_path:
-        if cfg.model.type == "resnet34":
-            model_obj = ResNet34MCP
-        model = model_obj.load_from_checkpoint(cfg.model.pretrained_weights_path)
-    else: 
-        model = build_model(cfg=cfg)
+    model = build_model(cfg=cfg)
     
     # Create wandb obejct
     wandb_logger = build_wandb(cfg=cfg, model=model)
@@ -72,7 +78,11 @@ def train(cfg):
     )
 
     lgr_logger.info(f"Start training...")
-    trainer.fit(model=model, datamodule=datamodule)
+    ckpt = os.path.join(cfg.model.save_ckpt_path, cfg.model.ckpt) if cfg.model.ckpt else None
+    trainer.fit(
+        model=model, 
+        datamodule=datamodule,
+        ckpt_path=ckpt)
     # trainer.test(dataloaders=datamodule)
 
 
