@@ -8,7 +8,7 @@ import torch
 from lightning.pytorch import Trainer
 
 from FlareTorch.datamodules import FlareHelioviewerDataModule
-from FlareTorch.models import ResNet34MCD, ResNet34QR
+from FlareTorch.models import ResNetMCD, ResNet34QR
 from FlareTorch.utils import build_wandb, build_callbacks
 
 torch.set_float32_matmul_precision('medium')
@@ -25,10 +25,10 @@ def build_model(cfg):
     module_type = cfg.model.module_type
 
     if module_type == "mcd":
-        return ResNet34MCD(
+        return ResNetMCD(
             model_type=cfg.model.type,
             module_dict=cfg.model.get(cfg.model.module_type),
-            base_model_dict=cfg.model.get(cfg.model.type, "resnet34"),
+            base_model_dict=cfg.model.get(cfg.model.type, "resnet"),
             loss_type=cfg.model.loss.type,
             optimizer_dict=cfg.optimizer,
             scheduler_dict=cfg.scheduler,

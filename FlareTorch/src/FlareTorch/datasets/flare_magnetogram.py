@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 
 import torch
+from torchvision import transforms
 from torch.utils.data import Dataset
 from torchvision.io import read_image
 
@@ -43,7 +44,17 @@ class FlareHelioviewerDataset(Dataset):
         self.index.sort_index(inplace=True)
         self._get_valid_indices()
         lgr_logger.info(f"{self.phase} instances: {self.__len__()}")
-    
+
+        # Define Augmentation (Only for Training)
+        if self.phase == "train":
+            self.augment = transforms.Compose([
+                transforms.RandomRotation(degrees=10),
+                transforms.RandomHorizontalFlip(p=0.5),
+                transforms.RandomVerticalFlip(p=0.5),
+            ])
+        else:
+            self.augment = None # No augmentation for validation/test
+
     def __len__(self):
         return len(self.valid_timestamps)
 
@@ -87,7 +98,13 @@ class FlareHelioviewerDataset(Dataset):
         self.valid_timestamps = sorted(idx[valid_mask])
     
     def transform(self, data):
+
         data = data.float()
+
+        # Apply Augmentation (Only if defined)
+        if hasattr(self, "augment") and self.augment is not None:
+            data = self.augment(data)
+
         data = data * self.limb_mask + 127.5 * (1 - self.limb_mask) # limb regions become zero after the norm
         scaled = data * self.scaler_mul
         shift = scaled + self.scaler_shift

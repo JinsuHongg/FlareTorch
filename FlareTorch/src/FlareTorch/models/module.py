@@ -1,13 +1,13 @@
 import torch
 import torch.nn as nn
 from torchmetrics.regression import R2Score
-from terratorch_surya.downstream_examples.solar_flare_forecasting.models import ResNet34Classifier
+from terratorch_surya.downstream_examples.solar_flare_forecasting.models import ResNet34Classifier, ResNet18Classifier
 
 from .base import BaseModule
 from ..utils.losses import PinballLoss
 
 
-class ResNet34MCD(BaseModule):
+class ResNetMCD(BaseModule):
     def __init__(
             self,
             model_type,
@@ -32,6 +32,15 @@ class ResNet34MCD(BaseModule):
                     num_classes=1,
                     dropout=base_model_dict.p_drop,
                 )
+
+            case "resnet18":
+                self.base_model = ResNet18Classifier(
+                    in_channels=base_model_dict.in_channels,
+                    time_steps=base_model_dict.time_steps,
+                    num_classes=1,
+                    dropout=base_model_dict.p_drop,
+                )
+
 
         match loss_type:
             case "mse":
@@ -117,6 +126,17 @@ class ResNet34QR(BaseModule):
         
         # Initialize Loss
         self.loss_fn = PinballLoss(quantiles=self.quantiles)
+
+        # find median index
+        try:
+            self.median_idx = self.quantiles.index(0.5)
+        except ValueError:
+            # Fallback: if 0.5 isn't in list, use the middle column
+            self.median_idx = len(self.quantiles) // 2
+            print("Warning: 0.5 quantile not found. Using index", self.median_idx, "for R2.")
+
+        self.train_r2 = R2Score()
+        self.val_r2 = R2Score()
         
         match model_type:
             case "resnet34":
@@ -134,6 +154,8 @@ class ResNet34QR(BaseModule):
         x, y, _ = batch
         preds = self(x) 
         loss = self.loss_fn(preds, y)
+        self.train_r2(preds[:, self.median_idx], y)
+        self.log('train_r2', self.train_r2, on_step=False, on_epoch=True, prog_bar=True)
         self.log('train_loss', loss, prog_bar=True, sync_dist=True)
         return loss
     
@@ -142,7 +164,9 @@ class ResNet34QR(BaseModule):
         x, y, _ = batch
         preds = self(x)
         loss = self.loss_fn(preds, y)
+        self.val_r2(preds[:, self.median_idx], y)
         self.log('val_loss', loss, prog_bar=True, sync_dist=True)
+        self.log('val_r2', self.val_r2, on_step=False, on_epoch=True, prog_bar=True)
         return loss
 
     def predict_step(self, batch, batch_idx):

@@ -84,7 +84,7 @@ wandb:
   entity: gsu-dmlab
   project: uncertainty-flare-regression
   log_model: false
-  notes: "Resnet34 backbone and MCP"
+  notes: Resnet34 backbone and QR
   offline: true
   save_code: false
-  tag: ["resnet34", "mcp", "regression"] # backbone model, head type, task
+  tag: ["resnet34", "qr", "regression"] # backbone model, head type, task
