@@ -4,7 +4,7 @@ hydra:
 
 experiment:
   task: regression
-  ckpt_file_name: resnet34_qr
+  ckpt_file_name: resnet18_qr
 
 data:
   repo: nasa-ibm-ai4science/surya-bench-flare-forecasting
@@ -42,8 +42,8 @@ model:
     quantiles: [0.025, 0.5, 0.975]
   
   # base model
-  type: resnet34
-  resnet34:
+  type: resnet18
+  resnet18:
     in_channels: 1
     time_steps: 1
     p_drop: 0.5
@@ -72,7 +72,7 @@ trainer:
   accelerator: gpu
   devices: 2
   num_nodes: 1
-  max_epochs: 150
+  max_epochs: 300
   precision: 32
   log_every_n_steps: 50
   limit_train_batches: 3000
@@ -84,7 +84,7 @@ wandb:
   entity: gsu-dmlab
   project: uncertainty-flare-regression
   log_model: false
-  notes: Resnet34 backbone and QR
+  notes: Resnet18 backbone and QR
   offline: true
   save_code: false
-  tag: ["resnet34", "qr", "regression"] # backbone model, head type, task
+  tag: ["resnet18", "qr", "regression"] # backbone model, head type, task

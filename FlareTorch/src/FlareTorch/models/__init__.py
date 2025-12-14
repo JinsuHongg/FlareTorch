@@ -1,1 +1,1 @@
-from .module import ResNetMCD, ResNet34QR
+from .module import ResNetMCD, ResNetQR

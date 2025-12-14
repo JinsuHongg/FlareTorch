@@ -8,7 +8,7 @@ import torch
 from lightning.pytorch import Trainer
 
 from FlareTorch.datamodules import FlareHelioviewerDataModule
-from FlareTorch.models import ResNetMCD, ResNet34QR
+from FlareTorch.models import ResNetMCD, ResNetQR
 from FlareTorch.utils import build_wandb, build_callbacks
 
 torch.set_float32_matmul_precision('medium')
@@ -35,7 +35,7 @@ def build_model(cfg):
         )
     
     elif module_type == "qr":
-        return ResNet34QR(
+        return ResNetQR(
             model_type=cfg.model.type,
             module_dict=cfg.model.get(cfg.model.module_type),
             base_model_dict=cfg.model.get(cfg.model.type, "resnet34"),

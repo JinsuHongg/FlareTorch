@@ -6,7 +6,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1 
 #SBATCH --gres=gpu:2
-#SBATCH --time=02:00:00
+#SBATCH --time=24:00:00
 #SBATCH --job-name=Resnet34_MCD
 #SBATCH --output=logs/%x_%j.out   # %x = job name, %j = job ID
 #SBATCH --error=logs/%x_%j.err    # separate error log (optional)

@@ -108,7 +108,7 @@ class ResNetMCD(BaseModule):
         self.log('val_r2', self.val_r2, on_step=False, on_epoch=True, prog_bar=True)
 
 
-class ResNet34QR(BaseModule):
+class ResNetQR(BaseModule):
     def __init__(
             self, 
             model_type,
@@ -141,6 +141,13 @@ class ResNet34QR(BaseModule):
         match model_type:
             case "resnet34":
                 self.base_model = ResNet34Classifier(
+                    in_channels=base_model_dict.in_channels,
+                    time_steps=base_model_dict.time_steps,
+                    num_classes=len(self.quantiles),
+                    dropout=base_model_dict.p_drop,
+                )
+            case "resnet18":
+                self.base_model = ResNet18Classifier(
                     in_channels=base_model_dict.in_channels,
                     time_steps=base_model_dict.time_steps,
                     num_classes=len(self.quantiles),
