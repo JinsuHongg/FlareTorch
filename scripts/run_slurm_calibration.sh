@@ -1,13 +1,15 @@
 #!/bin/bash -l
-# FILENAME: run_slurm.sh
+# FILENAME: run_slurm_calibration.sh
 
 #SBATCH -A cis251356-ai
 #SBATCH -p ai               # the default queue is "shared" queue
 #SBATCH --nodes=1
-#SBATCH --ntasks=1 
-#SBATCH --gres=gpu:2
-#SBATCH --time=24:00:00
-#SBATCH --job-name=Resnet34_MCD
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=32
+#SBATCH --gres=gpu:1
+#SBATCH --mem=32G
+#SBATCH --time=04:00:00
+#SBATCH --job-name=Resnet34_posthoc
 #SBATCH --output=logs/%x_%j.out   # %x = job name, %j = job ID
 #SBATCH --error=logs/%x_%j.err    # separate error log (optional)
 
@@ -19,4 +21,4 @@ source .venv/bin/activate
 cd FlareTorch/src/FlareTorch/tasks
 
 # Run your training script
-python training.py --config-dir=/home/x-jhong6/project/FlareTorch/FlareTorch/configs --config-name="$1"
+python -u calibration.py --config-dir=/home/x-jhong6/project/FlareTorch/FlareTorch/configs --config-name="$1"

@@ -1,4 +1,6 @@
 import torch
+import torch.nn as nn
+from laplace import Laplace
 import lightning as L
 import numpy as np
 from loguru import logger as lgr_logger
@@ -188,8 +190,29 @@ class CQRWrapper(L.LightningModule):
             "raw_lower": pred_lo,
             "raw_upper": pred_hi
         }
-    
-    
+
+
+class SafeLaplaceModel(nn.Module):
+    """
+    Wraps the base model to ensure input is always 5D (B, C, T, H, W).
+    """
+    def __init__(self, model):
+        super().__init__()
+        self.model = model
+
+    def forward(self, x):
+        if x.ndim == 4:
+            x = x.unsqueeze(2)
+            
+        out = self.model(x)
+        
+        # Fix Output Shape (1D -> 2D)
+        if out.ndim == 1:
+            out = out.unsqueeze(1)
+            
+        return out
+
+
 class LaplaceWrapper(L.LightningModule):
     def __init__(
             self, 
@@ -218,20 +241,22 @@ class LaplaceWrapper(L.LightningModule):
         Call this ONCE before testing.
         """
         lgr_logger.info("Fitting Laplace Approximation...")
-        
+
         # Extract the underlying PyTorch model from your LightningModule
         if hasattr(self.base_model, "base_model"):
-            model = self.base_model.base_model # ResNet34Classifier
+            raw_model = self.base_model.base_model # ResNet34Classifier
         else:
-            model = self.base_model
+            raw_model = self.base_model
+
+        safe_model = SafeLaplaceModel(raw_model)
 
         # Initialize Laplace
         # 'subset_of_weights="last_layer"' is highly recommended for ResNets (LLLA).
         self.la = Laplace(
-            model, 
+            safe_model, 
             likelihood="regression", 
             subset_of_weights="last_layer", 
-            hessian_structure="kron" # Kronecker factorization is efficient
+            hessian_structure="kron"
         )
 
         # Fit on a subset of data
@@ -239,9 +264,9 @@ class LaplaceWrapper(L.LightningModule):
         X_collect = []
         Y_collect = []
         count = 0
-        
+
         device = self.device
-        model.eval()
+        safe_model.eval()
 
         for batch in train_dataloader:
             x, y, _ = batch
@@ -250,12 +275,17 @@ class LaplaceWrapper(L.LightningModule):
             count += x.shape[0]
             if count >= self.subset_size:
                 break
-        
+
         X = torch.cat(X_collect)[:self.subset_size]
         Y = torch.cat(Y_collect)[:self.subset_size]
 
+        if Y.ndim == 1:
+            Y = Y.unsqueeze(1)
+
         # Fit the model
-        self.la.fit(torch.utils.data.TensorDataset(X, Y))
+        dataset = torch.utils.data.TensorDataset(X, Y)
+        loader = torch.utils.data.DataLoader(dataset, batch_size=128, shuffle=True)
+        self.la.fit(loader)
         
         # Optimize the prior precision (regularization) automatically
         self.la.optimize_prior_precision(method="marglik")
@@ -283,12 +313,12 @@ class LaplaceWrapper(L.LightningModule):
         total_std = torch.sqrt(f_var + sigma_noise**2).squeeze()
         f_mean = f_mean.squeeze()
 
-        normal_dist = torch.distributions.Normal(0, 1)
-        z_score = normal_dist.icdf(torch.tensor(1 - self.alpha / 2, device=x.device))
+        # normal_dist = torch.distributions.Normal(0, 1)
+        # z_score = normal_dist.icdf(torch.tensor(1 - self.alpha / 2, device=x.device))
         return {
             "mean": f_mean,
             "std": total_std,
-            "lower": f_mean - z_score * total_std,
-            "upper": f_mean + z_score * total_std,
-            "zscore": z_score,
+            # "lower": f_mean - z_score * total_std,
+            # "upper": f_mean + z_score * total_std,
+            # "zscore": z_score,
         }

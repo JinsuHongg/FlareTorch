@@ -41,7 +41,6 @@ class ResNetMCD(BaseModule):
                     dropout=base_model_dict.p_drop,
                 )
 
-
         match loss_type:
             case "mse":
                 self.loss_fn = nn.MSELoss()
@@ -86,7 +85,7 @@ class ResNetMCD(BaseModule):
         return {
             "mean": mean_pred,
             "std": std_pred,
-            "raw_samples": mc_predictions
+            # "raw_samples": mc_predictions
         }
 
     def training_step(self, batch, batch_idx):

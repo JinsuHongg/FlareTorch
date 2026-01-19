@@ -14,6 +14,7 @@ class FlareHelioviewerDataModule(L.LightningDataModule):
     ):
         super().__init__()
         self.cfg = cfg
+        self.batch_size = self.cfg.data.batch_size
 
     def get_dataset(self, phase, index_path):
         return FlareHelioviewerDataset(
@@ -49,7 +50,7 @@ class FlareHelioviewerDataModule(L.LightningDataModule):
                 )
         
         # Assign test dataset for use in dataloader(s)
-        if stage in (None, "test"):
+        if stage in (None, "test", "calibrate"):
             self.test_ds = self.get_dataset(
                 "test",
                 os.path.join(
@@ -57,19 +58,27 @@ class FlareHelioviewerDataModule(L.LightningDataModule):
                     self.cfg.data.index.test)
                 )
 
-        if stage in (None, "predict"):
+        if stage in (None, "predict", "calibrate"):
             self.pred_ds = self.get_dataset(
                 "test",
                 os.path.join(
                     self.cfg.data.index.path,
                     self.cfg.data.index.test)
                 )
+            
+        if stage in (None, "calibrate"):
+            self.cal_ds = self.get_dataset(
+                "calibration",
+                os.path.join(
+                    self.cfg.data.index.path,
+                    self.cfg.data.index.cal)
+                )
 
     def train_dataloader(self):
         return DataLoader(
             self.train_ds,
             num_workers=self.cfg.data.num_workers,
-            batch_size=self.cfg.data.batch_size,
+            batch_size=self.batch_size,
             shuffle=True,
             pin_memory=self.cfg.data.pin_memory
             )
@@ -78,7 +87,7 @@ class FlareHelioviewerDataModule(L.LightningDataModule):
         return DataLoader(
             self.val_ds,
             num_workers=self.cfg.data.num_workers,
-            batch_size=self.cfg.data.batch_size,
+            batch_size=self.batch_size,
             shuffle=False,
             pin_memory=self.cfg.data.pin_memory
             )
@@ -87,7 +96,7 @@ class FlareHelioviewerDataModule(L.LightningDataModule):
         return DataLoader(
             self.test_ds,
             num_workers=self.cfg.data.num_workers,
-            batch_size=self.cfg.data.batch_size,
+            batch_size=self.batch_size,
             shuffle=False,
             pin_memory=self.cfg.data.pin_memory
             )
@@ -96,7 +105,16 @@ class FlareHelioviewerDataModule(L.LightningDataModule):
         return DataLoader(
             self.pred_ds,
             num_workers=self.cfg.data.num_workers,
-            batch_size=self.cfg.data.batch_size,
+            batch_size=self.batch_size,
+            shuffle=False,
+            pin_memory=self.cfg.data.pin_memory
+            )
+    
+    def cal_dataloader(self):
+        return DataLoader(
+            self.cal_ds,
+            num_workers=self.cfg.data.num_workers,
+            batch_size=self.batch_size,
             shuffle=False,
             pin_memory=self.cfg.data.pin_memory
             )
