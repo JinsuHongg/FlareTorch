@@ -1,1 +1,1 @@
-from .flare_magnetogram import FlareHelioviewerDataset
+from .flare_cls_datasets import FlareHelioviewerClsDataset, FlareSuryaClsDataset

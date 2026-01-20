@@ -4,7 +4,7 @@
 
 ## Description
 
-This repository contains the source code and scripts for training and evaluating models for solar flare prediction. It utilizes PyTorch for building and training neural networks.
+This repository contains the source code and scripts for training and evaluating models for solar flare prediction. It utilizes PyTorch/PyTorch Lightning for building and training neural networks.
 
 ## Ready Dataset
 
@@ -29,10 +29,9 @@ The repository is organized as follows:
 
 1. **Clone the repository:**
    ```bash
-   git clone [https://github.com/JinsuHongg/FlareTorch.git](https://github.com/JinsuHongg/FlareTorch.git)
+   git clone https://github.com/JinsuHongg/FlareTorch.git
    cd FlareTorch
    ```
-   
 
 2. **Install dependencies:**
    ```bash

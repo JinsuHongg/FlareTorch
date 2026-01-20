@@ -7,11 +7,11 @@ from omegaconf import OmegaConf
 import torch
 from lightning.pytorch import Trainer
 
-from FlareTorch.datamodules import FlareHelioviewerDataModule
+from FlareTorch.datamodules import FlareHelioviewerClsDataModule
 from FlareTorch.models import ResNetMCD, ResNetQR
 from FlareTorch.utils import build_wandb, build_callbacks
 
-torch.set_float32_matmul_precision('medium')
+torch.set_float32_matmul_precision("medium")
 
 
 def load_config(config_path):
@@ -33,7 +33,7 @@ def build_model(cfg):
             optimizer_dict=cfg.optimizer,
             scheduler_dict=cfg.scheduler,
         )
-    
+
     elif module_type == "qr":
         return ResNetQR(
             model_type=cfg.model.type,
@@ -47,17 +47,16 @@ def build_model(cfg):
 @hydra.main(
     config_path="../../../configs",
     config_name="resnet_helioviewer_config.yaml",
-    version_base=None)
+    version_base=None,
+)
 def train(cfg):
 
     # Datamodule
-    datamodule = FlareHelioviewerDataModule(
-        cfg=cfg
-    )
+    datamodule = FlareHelioviewerClsDataModule(cfg=cfg)
 
     # Load model
     model = build_model(cfg=cfg)
-    
+
     # Create wandb obejct
     wandb_logger = build_wandb(cfg=cfg, model=model)
 
@@ -78,11 +77,12 @@ def train(cfg):
     )
 
     lgr_logger.info(f"Start training...")
-    ckpt = os.path.join(cfg.model.save_ckpt_path, cfg.model.ckpt) if cfg.model.ckpt else None
-    trainer.fit(
-        model=model, 
-        datamodule=datamodule,
-        ckpt_path=ckpt)
+    ckpt = (
+        os.path.join(cfg.model.save_ckpt_path, cfg.model.ckpt)
+        if cfg.model.ckpt
+        else None
+    )
+    trainer.fit(model=model, datamodule=datamodule, ckpt_path=ckpt)
     # trainer.test(dataloaders=datamodule)
 
 

@@ -2,13 +2,13 @@ import os
 import csv
 import hydra
 from loguru import logger as lgr_logger
-import numpy as np
+# import numpy as np
 
 import torch
-from torch.utils.data import DataLoader
+# from torch.utils.data import DataLoader
 import lightning as L
 
-from FlareTorch.datamodules import FlareHelioviewerDataModule
+from FlareTorch.datamodules import FlareHelioviewerClsDataModule
 from FlareTorch.explainability import LaplaceWrapper, CQRWrapper, CPWrapper
 from FlareTorch.models import ResNetMCD, ResNetQR
 
@@ -19,7 +19,7 @@ def save_batch_to_csv(file_path, batch_dict, header_written=False):
     Handles both vectors (per-sample) and scalars (constants).
     """
     keys = list(batch_dict.keys())
-    
+
     # Determine Batch Size from the first VECTOR found
     batch_size = 1
     for k in keys:
@@ -30,13 +30,13 @@ def save_batch_to_csv(file_path, batch_dict, header_written=False):
         elif isinstance(val, list):
             batch_size = len(val)
             break
-            
+
     rows = []
     for idx in range(batch_size):
         row = {}
         for k in keys:
             val = batch_dict[k]
-            
+
             if hasattr(val, "ndim") and val.ndim == 0:
                 item = val
             elif not hasattr(val, "__getitem__") or isinstance(val, (int, float)):
@@ -49,33 +49,35 @@ def save_batch_to_csv(file_path, batch_dict, header_written=False):
 
             if isinstance(item, torch.Tensor):
                 item = item.item()
-                
+
             row[k] = item
         rows.append(row)
 
     # Write to CSV
-    mode = 'a' if header_written else 'w'
-    with open(file_path, mode=mode, newline='') as f:
+    mode = "a" if header_written else "w"
+    with open(file_path, mode=mode, newline="") as f:
         writer = csv.DictWriter(f, fieldnames=keys)
         if not header_written:
             writer.writeheader()
         writer.writerows(rows)
 
+
 @hydra.main(
     config_path="../../../configs/",
     config_name="resnet34_calibration.yaml",
-    version_base=None)
+    version_base=None,
+)
 def run_uc_cal(cfg):
 
-    datamodule = FlareHelioviewerDataModule(cfg=cfg)
-    datamodule.setup(stage="calibrate") 
-    
+    datamodule = FlareHelioviewerClsDataModule(cfg=cfg)
+    datamodule.setup(stage="calibrate")
+
     if hasattr(datamodule, "cal_dataloader"):
         calibration_loader = datamodule.cal_dataloader()
     else:
         lgr_logger.warning("No cal_dataloader found, using val_dataloader.")
         calibration_loader = datamodule.val_dataloader()
-        
+
     test_loader = datamodule.test_dataloader()
 
     # Load Models
@@ -95,9 +97,7 @@ def run_uc_cal(cfg):
     alpha = cfg.uc.significance_level
 
     cp_model = CPWrapper(
-        trained_model=mcd, 
-        score_type=cfg.uc.cp.score_type, 
-        alpha=alpha
+        trained_model=mcd, score_type=cfg.uc.cp.score_type, alpha=alpha
     )
 
     cqr_model = CQRWrapper(
@@ -120,7 +120,7 @@ def run_uc_cal(cfg):
     lp_model.to(device)
 
     lgr_logger.info("Running Calibration...")
-    
+
     # CP Calibration
     cp_model.calibrate(calibration_loader)
     lgr_logger.info(f"CP Q_hat: {cp_model.q_hat.item():.4f}")
@@ -134,11 +134,9 @@ def run_uc_cal(cfg):
 
     # Prediction --------------------------------------------------------------
     lgr_logger.info("Running Prediction on Test Set...")
-    
+
     trainer = L.Trainer(
-        accelerator=cfg.trainer.accelerator, 
-        devices=cfg.trainer.devices, 
-        logger=False
+        accelerator=cfg.trainer.accelerator, devices=cfg.trainer.devices, logger=False
     )
 
     # Get all batches of predictions
@@ -146,10 +144,10 @@ def run_uc_cal(cfg):
     preds_cp = trainer.predict(cp_model, test_loader)
     preds_cqr = trainer.predict(cqr_model, test_loader)
     preds_lp = trainer.predict(lp_model, test_loader)
-    
+
     # Save Results ---
     lgr_logger.info("Saving results to CSV...")
-    
+
     # Define paths
     path_mcd = os.path.join(cfg.uc.csv_path, "mcd_result_testset.csv")
     path_cp = os.path.join(cfg.uc.csv_path, "cp_result_testset.csv")
@@ -163,11 +161,11 @@ def run_uc_cal(cfg):
     # Save CP
     for i, batch_res in enumerate(preds_cp):
         save_batch_to_csv(path_cp, batch_res, header_written=(i > 0))
-        
+
     # Save CQR
     for i, batch_res in enumerate(preds_cqr):
         save_batch_to_csv(path_cqr, batch_res, header_written=(i > 0))
-        
+
     # Save Laplace
     for i, batch_res in enumerate(preds_lp):
         save_batch_to_csv(path_lp, batch_res, header_written=(i > 0))
