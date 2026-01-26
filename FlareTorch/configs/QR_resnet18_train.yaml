@@ -15,7 +15,7 @@ data:
     val: validation.csv
     test: test.csv
   input:
-    path: /anvil/scratch/x-jhong6/data/mag
+    path: /anvil/projects/x-cis251356/helioviewer/mag
     ext: jpg
     dim: 512
   index_file_path: ../../assets/data
@@ -33,7 +33,7 @@ data:
   pin_memory: false
 
 model:
-  save_ckpt_path: ../../assets/check_point/qr/
+  save_ckpt_path: /anvil/projects/x-cis251356/check_point/FlareTorch/
   ckpt: null
   module_type: "qr" # mcp, qr
   # module specific

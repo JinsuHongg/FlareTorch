@@ -17,9 +17,10 @@ from terratorch_surya.datasets.helio import HelioNetCDFDataset
 class FlareHelioviewerRegDataset(Dataset):
     def __init__(
         self,
-        index_path: str,
+        input_index_path: str,
         input_time_delta: list[int],
         input_stat_path: str,
+        flare_index_path: str,
         limb_mask_path: str,
         scaler_mul: float,
         scaler_shift: float,
@@ -40,10 +41,14 @@ class FlareHelioviewerRegDataset(Dataset):
         self.phase = phase
 
         # load index file
-        self.index = pd.read_csv(index_path)
+        self.index = pd.read_csv(input_index_path)
         self.index["timestamp"] = pd.to_datetime(self.index["timestamp"])
         self.index.set_index("timestamp", inplace=True)
         self.index.sort_index(inplace=True)
+        self.flare_index = pd.read_csv(flare_index_path)
+        self.flare_index["timestamp"] = pd.to_datatime(self.flare_index["timestamp"])
+        self.flare_index.set_index("timestamp", inplace=True)
+        self.flare_index.sort_index(inplace=True)
         self._get_valid_indices()
         lgr_logger.info(f"{self.phase} instances: {self.__len__()}")
 
@@ -98,7 +103,16 @@ class FlareHelioviewerRegDataset(Dataset):
             has_required_time = required_times.isin(idx)
             valid_mask = valid_mask & has_required_time
 
-        self.valid_timestamps = sorted(idx[valid_mask])
+        # Get timestamps that have valid input sequences
+        valid_sequence_timestamps = idx[valid_mask]
+
+        # Keep only timestamps that are ALSO in flare_index
+        # This assumes both indices are DatetimeIndex
+        final_valid_timestamps = valid_sequence_timestamps.intersection(
+            self.flare_index.index
+        )
+
+        self.valid_timestamps = sorted(final_valid_timestamps)
 
     def transform(self, data):
 
