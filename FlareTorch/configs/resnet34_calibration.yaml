@@ -24,6 +24,7 @@ data:
   input_stat_path: ../../assets/data/los_mag_stat.yaml
   label_type: max_goes_class
   limb_mask_path: ../../assets/data/limb_mask.npy
+  target_norm_type: log
   scaler_mul: 1
   scaler_shift: -127.5
   scaler_div: 127.5

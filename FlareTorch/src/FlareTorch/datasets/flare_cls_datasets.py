@@ -14,10 +14,9 @@ from omegaconf import OmegaConf
 from terratorch_surya.datasets.helio import HelioNetCDFDataset
 
 
-class FlareHelioviewerClsDataset(Dataset):
+class FlareHelioviewerRegDataset(Dataset):
     def __init__(
         self,
-        task: str,
         index_path: str,
         input_time_delta: list[int],
         input_stat_path: str,
@@ -26,10 +25,10 @@ class FlareHelioviewerClsDataset(Dataset):
         scaler_shift: float,
         scaler_div: float,
         label_type: str,
+        target_norm_type: str,
         phase: str,
     ):
         super().__init__()
-        self.task = task
         self.input_time_delta = input_time_delta
         self.stats = OmegaConf.load(input_stat_path)  # input data statistics
         self.limb_mask = np.load(limb_mask_path)
@@ -37,6 +36,7 @@ class FlareHelioviewerClsDataset(Dataset):
         self.scaler_shift = scaler_shift
         self.scaler_div = scaler_div
         self.label_type = label_type
+        self.target_norm_type = target_norm_type
         self.phase = phase
 
         # load index file
@@ -51,7 +51,7 @@ class FlareHelioviewerClsDataset(Dataset):
         if self.phase == "train":
             self.augment = transforms.Compose(
                 [
-                    transforms.RandomRotation(degrees=10),
+                    transforms.RandomRotation(degrees=11),
                     transforms.RandomHorizontalFlip(p=0.5),
                     transforms.RandomVerticalFlip(p=0.5),
                 ]
@@ -83,7 +83,7 @@ class FlareHelioviewerClsDataset(Dataset):
         x = torch.stack(images, dim=1)
         x = x.float()
 
-        target = self.mapping_target(self.index.loc[current_time, self.label_type])
+        target = self.transform_target(self.index.loc[current_time, self.label_type])
 
         return x, torch.tensor(target, dtype=torch.float32), current_time.value
 
@@ -116,32 +116,10 @@ class FlareHelioviewerClsDataset(Dataset):
 
         return shift / self.scaler_div
 
-    def mapping_target(self, target):
-
-        if self.task == "regression" and self.label_type == "max_goes_class":
-
-            target = target.strip().upper()
-
-            if target.startswith("F"):
-                return self.transform_target(1e-9)
-
-            sub_class = float(target[1:])
-            major_class = str(target[0])
-            mapping_dict = {"A": 1e-8, "B": 1e-7, "C": 1e-6, "M": 1e-5, "X": 1e-4}
-
-            base_flux = mapping_dict.get(major_class)
-            if base_flux is None:
-                raise ValueError(f"Unknown flare class: {major_class}")
-
-            flux = sub_class * base_flux
-            if flux <= 0.0:
-                return self.transform_target(1e-9)
-            return self.transform_target(flux)
-
     def transform_target(self, target):
 
-        match self.task:
-            case "regression":
+        match self.target_norm_type:
+            case "log":
                 return np.log10(target) + 9
 
 
@@ -226,7 +204,7 @@ class FlareSuryaClsDataset(HelioNetCDFDataset):
 
 @hydra.main(config_path="../../configs/", config_name="alexnet_helioviewer_config.yaml")
 def main(cfg):
-    dataset = FlareHelioviewerClsDataset(
+    dataset = FlareHelioviewerRegDataset(
         task=cfg.experiment.task,
         index_path=cfg.data.index_path.train,
         input_time_delta=cfg.data.input_time_delta,

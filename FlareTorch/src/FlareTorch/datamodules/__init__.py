@@ -1,1 +1,1 @@
-from .flare import FlareHelioviewerClsDataModule
+from .flare import FlareHelioviewerRegDataModule

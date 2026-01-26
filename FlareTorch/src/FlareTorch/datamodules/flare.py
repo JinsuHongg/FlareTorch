@@ -4,18 +4,17 @@ from torch.utils.data import DataLoader
 
 from omegaconf import OmegaConf
 from loguru import logger as lgr_logger
-from ..datasets import FlareHelioviewerClsDataset
+from ..datasets import FlareHelioviewerRegDataset
 
 
-class FlareHelioviewerClsDataModule(L.LightningDataModule):
+class FlareHelioviewerRegDataModule(L.LightningDataModule):
     def __init__(self, cfg: str):
         super().__init__()
         self.cfg = cfg
         self.batch_size = self.cfg.data.batch_size
 
     def get_dataset(self, phase, index_path):
-        return FlareHelioviewerClsDataset(
-            task=self.cfg.experiment.task,
+        return FlareHelioviewerRegDataset(
             index_path=index_path,
             input_time_delta=self.cfg.data.input_time_delta,
             input_stat_path=self.cfg.data.input_stat_path,
@@ -24,6 +23,7 @@ class FlareHelioviewerClsDataModule(L.LightningDataModule):
             scaler_shift=self.cfg.data.scaler_shift,
             scaler_div=self.cfg.data.scaler_div,
             label_type=self.cfg.data.label_type,
+            target_norm_type=self.cfg.data.target_norm_type,
             phase=phase,
         )
 

@@ -7,7 +7,7 @@ from omegaconf import OmegaConf
 import torch
 from lightning.pytorch import Trainer
 
-from FlareTorch.datamodules import FlareHelioviewerClsDataModule
+from FlareTorch.datamodules import FlareHelioviewerRegDataModule
 from FlareTorch.models import ResNetMCD, ResNetQR
 from FlareTorch.utils import build_wandb, build_callbacks
 
@@ -52,7 +52,7 @@ def build_model(cfg):
 def train(cfg):
 
     # Datamodule
-    datamodule = FlareHelioviewerClsDataModule(cfg=cfg)
+    datamodule = FlareHelioviewerRegDataModule(cfg=cfg)
 
     # Load model
     model = build_model(cfg=cfg)

@@ -6,11 +6,21 @@ from lightning.pytorch.callbacks import (
 
 
 def build_callbacks(cfg, wandb_logger):
-    ckpt_name = (
-        f"{wandb_logger.experiment.id}_"
-        f"{cfg['experiment']['ckpt_file_name']}_"
-        "{epoch}-{val_loss:.4f}"
-    )
+
+    if cfg.model.module_type == "qr":
+        quantiles = cfg.model.qr.quantiles
+        cf_level = int((quantiles[2] - quantiles[0]) * 100)
+        ckpt_name = (
+            f"{wandb_logger.experiment.id}_"
+            f"{cfg['experiment']['ckpt_file_name']}_q{cf_level}_"
+            "{epoch}-{val_loss:.4f}"
+        )
+    else:
+        ckpt_name = (
+            f"{wandb_logger.experiment.id}_"
+            f"{cfg['experiment']['ckpt_file_name']}_"
+            "{epoch}-{val_loss:.4f}"
+        )
 
     return [
         RichProgressBar(),
