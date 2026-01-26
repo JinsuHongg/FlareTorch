@@ -13,11 +13,12 @@ class FlareHelioviewerRegDataModule(L.LightningDataModule):
         self.cfg = cfg
         self.batch_size = self.cfg.data.batch_size
 
-    def get_dataset(self, phase, index_path):
+    def get_dataset(self, phase, flare_index_path):
         return FlareHelioviewerRegDataset(
-            index_path=index_path,
+            input_index_path=self.cfg.data.input_index_path,
             input_time_delta=self.cfg.data.input_time_delta,
             input_stat_path=self.cfg.data.input_stat_path,
+            flare_index_path=flare_index_path,
             limb_mask_path=self.cfg.data.limb_mask_path,
             scaler_mul=self.cfg.data.scaler_mul,
             scaler_shift=self.cfg.data.scaler_shift,
@@ -32,31 +33,43 @@ class FlareHelioviewerRegDataModule(L.LightningDataModule):
         if stage in (None, "fit"):
             self.train_ds = self.get_dataset(
                 "train",
-                os.path.join(self.cfg.data.index.path, self.cfg.data.index.train),
+                os.path.join(
+                    self.cfg.data.flare_index.path, self.cfg.data.flare_index.train
+                ),
             )
 
         # Assign validation dataset for use in dataloader(s)
         if stage in ("fit", "validate", None):
             self.val_ds = self.get_dataset(
                 "validation",
-                os.path.join(self.cfg.data.index.path, self.cfg.data.index.val),
+                os.path.join(
+                    self.cfg.data.flare_index.path, self.cfg.data.flare_index.val
+                ),
             )
 
         # Assign test dataset for use in dataloader(s)
         if stage in (None, "test"):
             self.test_ds = self.get_dataset(
-                "test", os.path.join(self.cfg.data.index.path, self.cfg.data.index.test)
+                "test",
+                os.path.join(
+                    self.cfg.data.flare_index.path, self.cfg.data.flare_index.test
+                ),
             )
 
         if stage in (None, "predict"):
             self.pred_ds = self.get_dataset(
-                "test", os.path.join(self.cfg.data.index.path, self.cfg.data.index.test)
+                "test",
+                os.path.join(
+                    self.cfg.data.flare_index.path, self.cfg.data.flare_index.test
+                ),
             )
 
         if stage in (None, "calibrate"):
             self.cal_ds = self.get_dataset(
                 "calibration",
-                os.path.join(self.cfg.data.index.path, self.cfg.data.index.cal),
+                os.path.join(
+                    self.cfg.data.flare_index.path, self.cfg.data.flare_index.cal
+                ),
             )
 
     def train_dataloader(self):

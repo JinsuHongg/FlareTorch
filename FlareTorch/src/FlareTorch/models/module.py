@@ -1,32 +1,34 @@
 import torch
 import torch.nn as nn
 from torchmetrics.regression import R2Score
-from terratorch_surya.downstream_examples.solar_flare_forecasting.models import ResNet34Classifier, ResNet18Classifier
-
+from .backbone import (
+    ResNet18Regressor,
+    ResNet34Regressor,
+    ResNet50Regressor,
+    AlexNetRegressor,
+    MobileNetRegressor,
+)
 from .base import BaseModule
 from ..utils.losses import PinballLoss
 
 
 class ResNetMCD(BaseModule):
     def __init__(
-            self,
-            model_type,
-            module_dict,
-            base_model_dict,
-            loss_type,
-            optimizer_dict,
-            scheduler_dict
-            ):
-        super().__init__(
-            optimizer_dict=optimizer_dict,
-            scheduler_dict=scheduler_dict
-        )
+        self,
+        model_type,
+        module_dict,
+        base_model_dict,
+        loss_type,
+        optimizer_dict,
+        scheduler_dict,
+    ):
+        super().__init__(optimizer_dict=optimizer_dict, scheduler_dict=scheduler_dict)
         self.save_hyperparameters()
         self.num_forwards = module_dict.get("num_forwards", 100)
-        
+
         match model_type:
             case "resnet34":
-                self.base_model = ResNet34Classifier(
+                self.base_model = ResNet34Regressor(
                     in_channels=base_model_dict.in_channels,
                     time_steps=base_model_dict.time_steps,
                     num_classes=1,
@@ -34,7 +36,7 @@ class ResNetMCD(BaseModule):
                 )
 
             case "resnet18":
-                self.base_model = ResNet18Classifier(
+                self.base_model = ResNet18Regressor(
                     in_channels=base_model_dict.in_channels,
                     time_steps=base_model_dict.time_steps,
                     num_classes=1,
@@ -44,7 +46,7 @@ class ResNetMCD(BaseModule):
         match loss_type:
             case "mse":
                 self.loss_fn = nn.MSELoss()
-        
+
         self.train_r2 = R2Score()
         self.val_r2 = R2Score()
 
@@ -58,10 +60,10 @@ class ResNetMCD(BaseModule):
         This runs automatically when you call trainer.predict()
         """
         x, _, timestamps = batch
-        
+
         # Enable Dropout manually
-        self.base_model.train() 
-        
+        self.base_model.train()
+
         # Freeze BatchNorm layers to keep stats stable
         for module in self.base_model.modules():
             if isinstance(module, nn.BatchNorm2d) or isinstance(module, nn.BatchNorm1d):
@@ -78,9 +80,9 @@ class ResNetMCD(BaseModule):
         mc_predictions = torch.stack(mc_predictions)
 
         # Calculate Statistics
-        mean_pred = mc_predictions.mean(dim=0) # [Batch, 1]
-        std_pred = mc_predictions.std(dim=0)   # [Batch, 1]
-        
+        mean_pred = mc_predictions.mean(dim=0)  # [Batch, 1]
+        std_pred = mc_predictions.std(dim=0)  # [Batch, 1]
+
         # Return dict for easy analysis later
         return {
             "mean": mean_pred,
@@ -94,8 +96,8 @@ class ResNetMCD(BaseModule):
         y_hat = self(x)
         loss = self.loss_fn(y_hat.squeeze(), y)
         self.train_r2(y_hat, y)
-        self.log('train_loss', loss, prog_bar=True, sync_dist=True)
-        self.log('train_r2', self.train_r2, on_step=False, on_epoch=True, prog_bar=True)
+        self.log("train_loss", loss, prog_bar=True, sync_dist=True)
+        self.log("train_r2", self.train_r2, on_step=False, on_epoch=True, prog_bar=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -103,26 +105,23 @@ class ResNetMCD(BaseModule):
         y_hat = self(x)
         loss = self.loss_fn(y_hat.squeeze(), y)
         self.val_r2(y_hat, y)
-        self.log('val_loss', loss, prog_bar=True, sync_dist=True)
-        self.log('val_r2', self.val_r2, on_step=False, on_epoch=True, prog_bar=True)
+        self.log("val_loss", loss, prog_bar=True, sync_dist=True)
+        self.log("val_r2", self.val_r2, on_step=False, on_epoch=True, prog_bar=True)
 
 
 class ResNetQR(BaseModule):
     def __init__(
-            self, 
-            model_type,
-            base_model_dict,
-            optimizer_dict,
-            scheduler_dict,
-            module_dict,
-            ):
-        super().__init__(
-            optimizer_dict=optimizer_dict,
-            scheduler_dict=scheduler_dict
-        )
+        self,
+        model_type,
+        base_model_dict,
+        optimizer_dict,
+        scheduler_dict,
+        module_dict,
+    ):
+        super().__init__(optimizer_dict=optimizer_dict, scheduler_dict=scheduler_dict)
         self.save_hyperparameters()
         self.quantiles = module_dict.get("quantiles", [0.025, 0.5, 0.975])
-        
+
         # Initialize Loss
         self.loss_fn = PinballLoss(quantiles=self.quantiles)
 
@@ -132,21 +131,25 @@ class ResNetQR(BaseModule):
         except ValueError:
             # Fallback: if 0.5 isn't in list, use the middle column
             self.median_idx = len(self.quantiles) // 2
-            print("Warning: 0.5 quantile not found. Using index", self.median_idx, "for R2.")
+            print(
+                "Warning: 0.5 quantile not found. Using index",
+                self.median_idx,
+                "for R2.",
+            )
 
         self.train_r2 = R2Score()
         self.val_r2 = R2Score()
-        
+
         match model_type:
             case "resnet34":
-                self.base_model = ResNet34Classifier(
+                self.base_model = ResNet34Regressor(
                     in_channels=base_model_dict.in_channels,
                     time_steps=base_model_dict.time_steps,
                     num_classes=len(self.quantiles),
                     dropout=base_model_dict.p_drop,
                 )
             case "resnet18":
-                self.base_model = ResNet18Classifier(
+                self.base_model = ResNet18Regressor(
                     in_channels=base_model_dict.in_channels,
                     time_steps=base_model_dict.time_steps,
                     num_classes=len(self.quantiles),
@@ -158,26 +161,26 @@ class ResNetQR(BaseModule):
 
     def training_step(self, batch, batch_idx):
         x, y, _ = batch
-        preds = self(x) 
+        preds = self(x)
         loss = self.loss_fn(preds, y)
         self.train_r2(preds[:, self.median_idx], y)
-        self.log('train_r2', self.train_r2, on_step=False, on_epoch=True, prog_bar=True)
-        self.log('train_loss', loss, prog_bar=True, sync_dist=True)
+        self.log("train_r2", self.train_r2, on_step=False, on_epoch=True, prog_bar=True)
+        self.log("train_loss", loss, prog_bar=True, sync_dist=True)
         return loss
-    
+
     def validation_step(self, batch, batch_idx):
         # Lightning sets .eval() automatically here
         x, y, _ = batch
         preds = self(x)
         loss = self.loss_fn(preds, y)
         self.val_r2(preds[:, self.median_idx], y)
-        self.log('val_loss', loss, prog_bar=True, sync_dist=True)
-        self.log('val_r2', self.val_r2, on_step=False, on_epoch=True, prog_bar=True)
+        self.log("val_loss", loss, prog_bar=True, sync_dist=True)
+        self.log("val_r2", self.val_r2, on_step=False, on_epoch=True, prog_bar=True)
         return loss
 
     def predict_step(self, batch, batch_idx):
         x, _, _ = batch
         preds = self(x)
-        
+
         # Dynamic return based on your config
         return {str(q): preds[:, i] for i, q in enumerate(self.quantiles)}

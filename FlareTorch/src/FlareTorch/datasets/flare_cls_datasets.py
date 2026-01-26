@@ -46,7 +46,7 @@ class FlareHelioviewerRegDataset(Dataset):
         self.index.set_index("timestamp", inplace=True)
         self.index.sort_index(inplace=True)
         self.flare_index = pd.read_csv(flare_index_path)
-        self.flare_index["timestamp"] = pd.to_datatime(self.flare_index["timestamp"])
+        self.flare_index["timestamp"] = pd.to_datetime(self.flare_index["timestamp"])
         self.flare_index.set_index("timestamp", inplace=True)
         self.flare_index.sort_index(inplace=True)
         self._get_valid_indices()
@@ -88,7 +88,9 @@ class FlareHelioviewerRegDataset(Dataset):
         x = torch.stack(images, dim=1)
         x = x.float()
 
-        target = self.transform_target(self.index.loc[current_time, self.label_type])
+        target = self.transform_target(
+            self.flare_index.loc[current_time, self.label_type]
+        )
 
         return x, torch.tensor(target, dtype=torch.float32), current_time.value
 

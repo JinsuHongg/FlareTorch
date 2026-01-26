@@ -9,19 +9,19 @@ experiment:
 data:
   repo: nasa-ibm-ai4science/surya-bench-flare-forecasting
   ref_mask_img: HMI-Mag.2010.12.06_07.00.00.jpg
-  index:
+  flare_index:
     path: ../../assets/data/
     train: train.csv
     val: validation.csv
     test: test.csv
+  input_index_path: ../../assets/data/helioviewer_mag_input.csv
   input:
     path: /anvil/projects/x-cis251356/helioviewer/mag
     ext: jpg
     dim: 512
-  index_file_path: ../../assets/data
   input_time_delta: [0] #[-60, 0]
   input_stat_path: ../../assets/data/los_mag_stat.yaml
-  label_type: max_goes_class
+  label_type: max_intensity
   limb_mask_path: ../../assets/data/limb_mask.npy
   target_norm_type: log
   scaler_mul: 1
@@ -30,7 +30,7 @@ data:
   # for dataloader
   num_workers: 2
   batch_size: 256
-  pin_memory: false
+  pin_memory: true
 
 model:
   save_ckpt_path: /anvil/projects/x-cis251356/check_point/FlareTorch/
