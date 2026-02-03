@@ -136,6 +136,8 @@ class FlareHelioviewerRegDataset(Dataset):
 
         match self.target_norm_type:
             case "log":
+                if target == 0:
+                    print("target is zero?")
                 return np.log10(target) + 9
 
 

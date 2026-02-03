@@ -48,7 +48,7 @@ class FlareHelioviewerRegDataModule(L.LightningDataModule):
             )
 
         # Assign test dataset for use in dataloader(s)
-        if stage in (None, "test"):
+        if stage in (None, "test", "predict"):
             self.test_ds = self.get_dataset(
                 "test",
                 os.path.join(

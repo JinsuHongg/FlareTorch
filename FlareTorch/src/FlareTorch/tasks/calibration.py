@@ -2,13 +2,15 @@ import os
 import csv
 import hydra
 from loguru import logger as lgr_logger
+
 # import numpy as np
 
 import torch
+
 # from torch.utils.data import DataLoader
 import lightning as L
 
-from FlareTorch.datamodules import FlareHelioviewerClsDataModule
+from FlareTorch.datamodules import FlareHelioviewerRegDataModule
 from FlareTorch.explainability import LaplaceWrapper, CQRWrapper, CPWrapper
 from FlareTorch.models import ResNetMCD, ResNetQR
 
@@ -69,8 +71,9 @@ def save_batch_to_csv(file_path, batch_dict, header_written=False):
 )
 def run_uc_cal(cfg):
 
-    datamodule = FlareHelioviewerClsDataModule(cfg=cfg)
+    datamodule = FlareHelioviewerRegDataModule(cfg=cfg)
     datamodule.setup(stage="calibrate")
+    datamodule.setup(stage="test")
 
     if hasattr(datamodule, "cal_dataloader"):
         calibration_loader = datamodule.cal_dataloader()
@@ -87,8 +90,8 @@ def run_uc_cal(cfg):
 
     match cfg.check_point.model_type:
         case "resnet":
-            mcd = ResNetMCD.load_from_checkpoint(mcd_pretrained_path)
-            qr = ResNetQR.load_from_checkpoint(qr_pretrained_path)
+            mcd = ResNetMCD.load_from_checkpoint(mcd_pretrained_path, strict=False)
+            qr = ResNetQR.load_from_checkpoint(qr_pretrained_path, strict=False)
         case _:
             raise ValueError(f"Wrong model type: {cfg.check_point.model_type}")
 
@@ -149,10 +152,10 @@ def run_uc_cal(cfg):
     lgr_logger.info("Saving results to CSV...")
 
     # Define paths
-    path_mcd = os.path.join(cfg.uc.csv_path, "mcd_result_testset.csv")
-    path_cp = os.path.join(cfg.uc.csv_path, "cp_result_testset.csv")
-    path_cqr = os.path.join(cfg.uc.csv_path, "cqr_result_testset.csv")
-    path_lp = os.path.join(cfg.uc.csv_path, "lp_result_testset.csv")
+    path_mcd = os.path.join(cfg.uc.csv_path, f"mcd_alpha{alpha}_result_testset.csv")
+    path_cp = os.path.join(cfg.uc.csv_path, f"cp_alpha{alpha}_result_testset.csv")
+    path_cqr = os.path.join(cfg.uc.csv_path, f"cqr_alpha{alpha}_result_testset.csv")
+    path_lp = os.path.join(cfg.uc.csv_path, f"lp_alpha{alpha}_result_testset.csv")
 
     # Iterate through batches and save
     # Save MCD

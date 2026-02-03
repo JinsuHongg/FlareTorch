@@ -38,6 +38,7 @@ def map_cls_to_intensity(each_cls):
     else:
         goes_cls = each_cls[0]
         sub_cls = float(each_cls[1:])
+        sub_cls = 0.1 if sub_cls == 0 else sub_cls
         return mapping_dict[goes_cls] * sub_cls
 
 
@@ -66,11 +67,13 @@ def main(cfg):
     df_val = add_max_intensity(df_val)
     df_test = add_max_intensity(df_test)
 
-    df_input.to_csv(cfg.data.index.path + "helioviewer_mag_input.csv", index=False)
-    df_train.to_csv(cfg.data.index.path + "train.csv", index=False)
-    df_val_leaky.to_csv(cfg.data.index.path + "leaky_validation.csv", index=False)
-    df_val.to_csv(cfg.data.index.path + "validation.csv", index=False)
-    df_test.to_csv(cfg.data.index.path + "test.csv", index=False)
+    df_input.to_csv(
+        cfg.data.flare_index.path + "helioviewer_mag_input.csv", index=False
+    )
+    df_train.to_csv(cfg.data.flare_index.path + "train.csv", index=False)
+    df_val_leaky.to_csv(cfg.data.flare_index.path + "leaky_validation.csv", index=False)
+    df_val.to_csv(cfg.data.flare_index.path + "validation.csv", index=False)
+    df_test.to_csv(cfg.data.flare_index.path + "test.csv", index=False)
 
 
 if __name__ == "__main__":

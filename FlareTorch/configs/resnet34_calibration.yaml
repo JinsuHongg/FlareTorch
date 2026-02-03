@@ -13,6 +13,7 @@ data:
     path: ../../assets/data/
     train: train.csv
     val: validation.csv
+    cal: leaky_validation.csv
     test: test.csv
   input_index_path: ../../assets/data/helioviewer_mag_input.csv
   input:
@@ -34,13 +35,13 @@ data:
 
 check_point:
   model_type: resnet
-  base: ../../assets/check_point/
+  base: /anvil/projects/x-cis251356/check_point/FlareTorch/
   mcd: 2meqot08_resnet34_mcp_epoch=7-val_loss=1.2375.ckpt
-  qr: 0lt5sbnq_resnet34_qr_epoch=33-val_loss=0.1677.ckpt
+  qr: k55lb3ui_resnet34_qr_q50_epoch=37-val_loss=0.3438.ckpt
 
 uc:
   csv_path: ../../assets/uc_results/
-  significance_level: 0.05
+  significance_level: 0.5
   mcd:
     num_forwards: 100
   cp:
