@@ -1,60 +1,114 @@
 # FlareTorch
 
-**FlareTorch** is a basic machine learning module designed for solar flare forecasting.
+[![PyPI version](https://badge.fury.io/py/flaretorch.svg)](https://badge.fury.io/py/flaretorch)
+[![Python](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/)
+[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-## Description
+**FlareTorch** is a machine learning library for solar flare forecasting with uncertainty quantification.
 
-This repository contains the source code and scripts for training and evaluating models for solar flare prediction. It utilizes PyTorch/PyTorch Lightning for building and training neural networks.
+## Features
 
-## Ready Dataset
-
-
-## Project Structure
-
-The repository is organized as follows:
-
-- **`FlareTorch/`**: The main Python package containing the core model architectures, dataloaders, and utility functions.
-- **`scripts/`**: Executable scripts for training, testing, and data processing.
-- **`pyproject.toml`**: Project configuration and dependency definitions.
-- **`uv.lock`**: Lockfile ensuring reproducible environments (managed by `uv`).
+- Deep learning models (ResNet variants with MCDropout, Quantile Regression)
+- Uncertainty quantification methods (Conformal Prediction, CQR, Laplace Approximation)
+- PyTorch Lightning integration for easy training and evaluation
+- Hydra-based configuration management
+- Weights & Biases integration for experiment tracking
 
 ## Installation
 
-### Prerequisites
+### From PyPI (when released)
 
-- Python (Version specified in `.python-version`, e.g., 3.10+)
-- [uv](https://github.com/astral-sh/uv) (Recommended for dependency management)
+```bash
+pip install flaretorch
+```
 
-### Setup
+### From Source
 
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/JinsuHongg/FlareTorch.git
-   cd FlareTorch
-   ```
+```bash
+git clone https://github.com/JinsuHongg/FlareTorch.git
+cd FlareTorch
+uv sync
+```
 
-2. **Install dependencies:**
-   ```bash
-   uv sync
-   ```
+### Development Installation
+
+```bash
+git clone https://github.com/JinsuHongg/FlareTorch.git
+cd FlareTorch
+uv sync --all-extras
+```
+
+## Quick Start
+
+```python
+import flaretorch
+from flaretorch.models import ResNetMCD
+
+# Access version
+print(flaretorch.__version__)
+
+# Use models
+model = ResNetMCD(...)
+```
+
+## Project Structure
+
+```
+flaretorch/
+├── src/flaretorch/      # Main package
+│   ├── models/           # Neural network architectures
+│   ├── datasets/         # Dataset implementations
+│   ├── datamodules/       # PyTorch Lightning datamodules
+│   ├── metrics/           # Evaluation metrics
+│   ├── explainability/    # Uncertainty quantification
+│   ├── tasks/             # Training and calibration tasks
+│   └── utils/             # Utility functions
+├── tests/                 # Test suite
+├── docs/                  # Documentation
+├── configs/               # Hydra configuration files
+└── scripts/               # CLI entry points
+```
 
 ## Usage
 
 ### Training a Model
 
-   ```bash
-      python scripts/train.py --config configs/default.yaml
-   ```
+```bash
+flare-train --config configs/default.yaml
+```
 
-### Inference / Evaluation
+### Evaluation
 
-   ```bash
-      python scripts/evaluate.py --model_path checkpoints/best_model.ckpt
-   ```
+```bash
+flare-eval --model_path checkpoints/best_model.ckpt
+```
+
+## Development
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines.
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for version history.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Citation
+
+If you use FlareTorch in your research, please cite:
+
+```bibtex
+@software{flaretorch2024,
+  title = {FlareTorch: Machine Learning for Solar Flare Forecasting},
+  authors = {Jinsu Hong and Berkay Aydin},
+  year = {2024},
+  url = {https://github.com/JinsuHongg/FlareTorch}
+}
+```
 
 ## Contact
-### Authors
- - Jinsu Hong, jhong36@gsu.edu
- - Berkay Aydin, baydin2@gsu.edu
 
-
+- **Jinsu Hong** - jinsuhong.knight@gmail.com / jhong36@gsu.edu
+- **Berkay Aydin** - baydin2@gsu.edu

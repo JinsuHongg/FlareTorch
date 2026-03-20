@@ -3,7 +3,7 @@ import hydra
 import torch
 import numpy as np
 import pandas as pd
-from FlareTorch.datamodules import FlareHelioviewerDataModule
+from flaretorch.datamodules import FlareHelioviewerRegDataModule
 
 
 @hydra.main(
@@ -11,8 +11,7 @@ from FlareTorch.datamodules import FlareHelioviewerDataModule
     config_name="MCD_resnet34_train.yaml",
 )
 def main(cfg):
-
-    datamodule = FlareHelioviewerDataModule(cfg=cfg)
+    datamodule = FlareHelioviewerRegDataModule(cfg=cfg)
     datamodule.batch_size = 1
     datamodule.setup(stage="test")
 
@@ -26,9 +25,7 @@ def main(cfg):
         time = pd.to_datetime(time[0])
         datamodule.test_ds.index.loc[time, "pixel_sum"] = img_sum
 
-    datamodule.test_ds.index.to_csv(
-        "../../assets/data/test_pixel_sum.csv", index=False
-    )
+    datamodule.test_ds.index.to_csv("../../assets/data/test_pixel_sum.csv", index=False)
 
 
 if __name__ == "__main__":

@@ -10,9 +10,9 @@ import torch
 # from torch.utils.data import DataLoader
 import lightning as L
 
-from FlareTorch.datamodules import FlareHelioviewerRegDataModule
-from FlareTorch.explainability import LaplaceWrapper, CQRWrapper, CPWrapper
-from FlareTorch.models import ResNetMCD, ResNetQR
+from flaretorch.datamodules import FlareHelioviewerRegDataModule
+from flaretorch.explainability import LaplaceWrapper, CQRWrapper, CPWrapper
+from flaretorch.models import ResNetMCD, ResNetQR
 
 
 def save_batch_to_csv(file_path, batch_dict, header_written=False):
@@ -70,7 +70,6 @@ def save_batch_to_csv(file_path, batch_dict, header_written=False):
     version_base=None,
 )
 def run_uc_cal(cfg):
-
     datamodule = FlareHelioviewerRegDataModule(cfg=cfg)
     datamodule.setup(stage="calibrate")
     datamodule.setup(stage="test")
