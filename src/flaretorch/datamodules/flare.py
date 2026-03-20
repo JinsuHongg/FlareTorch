@@ -8,12 +8,39 @@ from ..datasets import FlareHelioviewerRegDataset
 
 
 class FlareHelioviewerRegDataModule(L.LightningDataModule):
+    """PyTorch Lightning DataModule for FlareHelioviewerRegDataset.
+
+    This class manages the loading and preparation of training, validation,
+    test, and calibration datasets for solar flare regression.
+
+    Args:
+        cfg: Configuration object containing data and training parameters.
+
+    Attributes:
+        cfg: Configuration object.
+        batch_size: Size of each data batch.
+        train_ds: Training dataset.
+        val_ds: Validation dataset.
+        test_ds: Test dataset.
+        pred_ds: Prediction dataset.
+        cal_ds: Calibration dataset.
+    """
+
     def __init__(self, cfg: str):
         super().__init__()
         self.cfg = cfg
         self.batch_size = self.cfg.data.batch_size
 
     def get_dataset(self, phase, flare_index_path):
+        """Creates a FlareHelioviewerRegDataset instance.
+
+        Args:
+            phase: Dataset phase ('train', 'validation', 'test', or 'calibration').
+            flare_index_path: Path to the flare index CSV file.
+
+        Returns:
+            A FlareHelioviewerRegDataset instance.
+        """
         return FlareHelioviewerRegDataset(
             input_index_path=self.cfg.data.input_index_path,
             input_time_delta=self.cfg.data.input_time_delta,
@@ -29,6 +56,12 @@ class FlareHelioviewerRegDataModule(L.LightningDataModule):
         )
 
     def setup(self, stage: str):
+        """Sets up the datasets for different stages.
+
+        Args:
+            stage: The stage for which to set up the data ('fit', 'validate',
+                'test', 'predict', or 'calibrate').
+        """
         # Assign train/val datasets for use in dataloaders
         if stage in (None, "fit"):
             self.train_ds = self.get_dataset(
@@ -73,6 +106,11 @@ class FlareHelioviewerRegDataModule(L.LightningDataModule):
             )
 
     def train_dataloader(self):
+        """Returns the training dataloader.
+
+        Returns:
+            A DataLoader instance for training.
+        """
         return DataLoader(
             self.train_ds,
             num_workers=self.cfg.data.num_workers,
@@ -82,6 +120,11 @@ class FlareHelioviewerRegDataModule(L.LightningDataModule):
         )
 
     def val_dataloader(self):
+        """Returns the validation dataloader.
+
+        Returns:
+            A DataLoader instance for validation.
+        """
         return DataLoader(
             self.val_ds,
             num_workers=self.cfg.data.num_workers,
@@ -91,6 +134,11 @@ class FlareHelioviewerRegDataModule(L.LightningDataModule):
         )
 
     def test_dataloader(self):
+        """Returns the test dataloader.
+
+        Returns:
+            A DataLoader instance for testing.
+        """
         return DataLoader(
             self.test_ds,
             num_workers=self.cfg.data.num_workers,
@@ -100,6 +148,11 @@ class FlareHelioviewerRegDataModule(L.LightningDataModule):
         )
 
     def predict_dataloader(self):
+        """Returns the prediction dataloader.
+
+        Returns:
+            A DataLoader instance for prediction.
+        """
         return DataLoader(
             self.pred_ds,
             num_workers=self.cfg.data.num_workers,
@@ -109,6 +162,11 @@ class FlareHelioviewerRegDataModule(L.LightningDataModule):
         )
 
     def cal_dataloader(self):
+        """Returns the calibration dataloader.
+
+        Returns:
+            A DataLoader instance for calibration.
+        """
         return DataLoader(
             self.cal_ds,
             num_workers=self.cfg.data.num_workers,

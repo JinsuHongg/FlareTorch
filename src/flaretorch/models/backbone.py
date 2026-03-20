@@ -4,6 +4,23 @@ import torchvision.models as models
 
 
 class ResNet18Regressor(nn.Module):
+    """ResNet18-based regressor for image sequences.
+
+    This model uses a ResNet18 backbone modified to handle multiple time steps
+    by merging them into the channel dimension.
+
+    Args:
+        in_channels: Number of input channels per time step.
+        time_steps: Number of time steps in the input sequence.
+        num_classes: Number of output regression values.
+        dropout: Dropout probability for the final layer.
+
+    Attributes:
+        resnet: Modified ResNet18 backbone.
+        dropout: Dropout layer.
+        regressor: Final linear regression layer.
+    """
+
     def __init__(self, in_channels=3, time_steps=1, num_classes=1, dropout=0.1):
         super(ResNet18Regressor, self).__init__()
         # Load pretrained ResNet18
@@ -23,6 +40,14 @@ class ResNet18Regressor(nn.Module):
         self.regressor = nn.Linear(512, num_classes)
 
     def forward(self, x):
+        """Forward pass of the model.
+
+        Args:
+            x: Input tensor of shape (B, C, T, H, W).
+
+        Returns:
+            Output tensor of shape (B, num_classes) or (B,).
+        """
         # Input: B, C, T, H, W
         B, C, T, H, W = x.shape
 
@@ -44,6 +69,23 @@ class ResNet18Regressor(nn.Module):
 
 
 class ResNet34Regressor(nn.Module):
+    """ResNet34-based regressor for image sequences.
+
+    This model uses a ResNet34 backbone modified to handle multiple time steps
+    by merging them into the channel dimension.
+
+    Args:
+        in_channels: Number of input channels per time step.
+        time_steps: Number of time steps in the input sequence.
+        num_classes: Number of output regression values.
+        dropout: Dropout probability for the final layer.
+
+    Attributes:
+        resnet: Modified ResNet34 backbone.
+        dropout: Dropout layer.
+        regressor: Final linear regression layer.
+    """
+
     def __init__(self, in_channels=3, time_steps=1, num_classes=1, dropout=0.1):
         super(ResNet34Regressor, self).__init__()
         # Load pretrained ResNet34
@@ -63,6 +105,14 @@ class ResNet34Regressor(nn.Module):
         self.regressor = nn.Linear(512, num_classes)
 
     def forward(self, x):
+        """Forward pass of the model.
+
+        Args:
+            x: Input tensor of shape (B, C, T, H, W).
+
+        Returns:
+            Output tensor of shape (B, num_classes) or (B,).
+        """
         # Input: B, C, T, H, W
         B, C, T, H, W = x.shape
 
@@ -84,6 +134,23 @@ class ResNet34Regressor(nn.Module):
 
 
 class ResNet50Regressor(nn.Module):
+    """ResNet50-based regressor for image sequences.
+
+    This model uses a ResNet50 backbone modified to handle multiple time steps
+    by merging them into the channel dimension.
+
+    Args:
+        in_channels: Number of input channels per time step.
+        time_steps: Number of time steps in the input sequence.
+        num_classes: Number of output regression values.
+        dropout: Dropout probability for the final layer.
+
+    Attributes:
+        resnet: Modified ResNet50 backbone.
+        dropout: Dropout layer.
+        regressor: Final linear regression layer.
+    """
+
     def __init__(self, in_channels=3, time_steps=1, num_classes=1, dropout=0.1):
         super(ResNet50Regressor, self).__init__()
         # Load pretrained ResNet50
@@ -103,6 +170,14 @@ class ResNet50Regressor(nn.Module):
         self.regressor = nn.Linear(2048, num_classes)
 
     def forward(self, x):
+        """Forward pass of the model.
+
+        Args:
+            x: Input tensor of shape (B, C, T, H, W).
+
+        Returns:
+            Output tensor of shape (B, num_classes) or (B,).
+        """
         # Input: B, C, T, H, W
         B, C, T, H, W = x.shape
 
@@ -124,6 +199,24 @@ class ResNet50Regressor(nn.Module):
 
 
 class AlexNetRegressor(nn.Module):
+    """AlexNet-based regressor for image sequences.
+
+    This model uses an AlexNet backbone modified to handle multiple time steps
+    by merging them into the channel dimension.
+
+    Args:
+        in_channels: Number of input channels per time step.
+        time_steps: Number of time steps in the input sequence.
+        num_classes: Number of output regression values.
+        dropout: Dropout probability for the final layer.
+
+    Attributes:
+        alexnet: Modified AlexNet backbone.
+        dropout: Dropout layer.
+        adaptive_pool: Adaptive average pooling layer.
+        regressor: Final linear regression layer.
+    """
+
     def __init__(self, in_channels=3, time_steps=1, num_classes=1, dropout=0.1):
         super(AlexNetRegressor, self).__init__()
         # Load pretrained AlexNet
@@ -145,6 +238,14 @@ class AlexNetRegressor(nn.Module):
         self.regressor = nn.Linear(9216, num_classes)  # 6*6*256 = 9216
 
     def forward(self, x):
+        """Forward pass of the model.
+
+        Args:
+            x: Input tensor of shape (B, C, T, H, W).
+
+        Returns:
+            Output tensor of shape (B, num_classes) or (B,).
+        """
         # Input: B, C, T, H, W
         B, C, T, H, W = x.shape
 
@@ -169,6 +270,23 @@ class AlexNetRegressor(nn.Module):
 
 
 class MobileNetRegressor(nn.Module):
+    """MobileNetV2-based regressor for image sequences.
+
+    This model uses a MobileNetV2 backbone modified to handle multiple time steps
+    by merging them into the channel dimension.
+
+    Args:
+        in_channels: Number of input channels per time step.
+        time_steps: Number of time steps in the input sequence.
+        num_classes: Number of output regression values.
+        dropout: Dropout probability for the final layer.
+
+    Attributes:
+        mobilenet: Modified MobileNetV2 backbone.
+        dropout: Dropout layer.
+        regressor: Final linear regression layer.
+    """
+
     def __init__(self, in_channels=3, time_steps=1, num_classes=1, dropout=0.1):
         super(MobileNetRegressor, self).__init__()
         # Load pretrained MobileNet
@@ -188,6 +306,14 @@ class MobileNetRegressor(nn.Module):
         self.regressor = nn.Linear(1280, num_classes)
 
     def forward(self, x):
+        """Forward pass of the model.
+
+        Args:
+            x: Input tensor of shape (B, C, T, H, W).
+
+        Returns:
+            Output tensor of shape (B, num_classes) or (B,).
+        """
         # Input: B, C, T, H, W
         B, C, T, H, W = x.shape
 

@@ -15,6 +15,40 @@ from terratorch_surya.datasets.helio import HelioNetCDFDataset
 
 
 class FlareHelioviewerRegDataset(Dataset):
+    """Dataset for solar flare regression using Helioviewer images.
+
+    This dataset loads sequences of solar images from Helioviewer and pairs them
+    with flare intensity labels for regression tasks.
+
+    Args:
+        input_index_path: Path to the CSV file containing image metadata.
+        input_time_delta: List of time offsets (in minutes) for the input sequence.
+        input_stat_path: Path to the YAML file containing data statistics.
+        flare_index_path: Path to the CSV file containing flare labels.
+        limb_mask_path: Path to the NPY file containing the solar limb mask.
+        scaler_mul: Multiplicative factor for input scaling.
+        scaler_shift: Additive shift for input scaling.
+        scaler_div: Divisor for input scaling.
+        label_type: Column name in flare_index for the target label.
+        target_norm_type: Type of normalization for the target (e.g., 'log').
+        phase: Dataset phase ('train', 'val', or 'test').
+
+    Attributes:
+        input_time_delta: List of time offsets for the input sequence.
+        stats: Loaded data statistics.
+        limb_mask: Solar limb mask array.
+        scaler_mul: Multiplicative factor for input scaling.
+        scaler_shift: Additive shift for input scaling.
+        scaler_div: Divisor for input scaling.
+        label_type: Column name for the target label.
+        target_norm_type: Type of normalization for the target.
+        phase: Dataset phase.
+        index: Image metadata index.
+        flare_index: Flare labels index.
+        augment: Augmentation pipeline for training.
+        valid_timestamps: List of timestamps with valid input sequences and labels.
+    """
+
     def __init__(
         self,
         input_index_path: str,
@@ -65,9 +99,22 @@ class FlareHelioviewerRegDataset(Dataset):
             self.augment = None  # No augmentation for validation/test
 
     def __len__(self):
+        """Returns the number of samples in the dataset.
+
+        Returns:
+            The number of valid timestamps.
+        """
         return len(self.valid_timestamps)
 
     def __getitem__(self, idx: int):
+        """Returns a single sample from the dataset.
+
+        Args:
+            idx: Index of the sample.
+
+        Returns:
+            A tuple containing (input_tensor, target_tensor, timestamp).
+        """
         current_time = self.valid_timestamps[idx]
 
         # Calculate all timestamps needed for this sample
@@ -100,7 +147,6 @@ class FlareHelioviewerRegDataset(Dataset):
 
         valid_mask = np.ones(len(idx), dtype=bool)
         for dt in time_deltas:
-
             required_times = idx + dt
             has_required_time = required_times.isin(idx)
             valid_mask = valid_mask & has_required_time
@@ -117,7 +163,14 @@ class FlareHelioviewerRegDataset(Dataset):
         self.valid_timestamps = sorted(final_valid_timestamps)
 
     def transform(self, data):
+        """Applies transformations and scaling to the input image.
 
+        Args:
+            data: Input image tensor.
+
+        Returns:
+            Transformed and scaled image tensor.
+        """
         data = data.float()
 
         # Apply Augmentation (Only if defined)
@@ -133,7 +186,14 @@ class FlareHelioviewerRegDataset(Dataset):
         return shift / self.scaler_div
 
     def transform_target(self, target):
+        """Applies normalization to the target label.
 
+        Args:
+            target: Raw target value.
+
+        Returns:
+            Normalized target value.
+        """
         match self.target_norm_type:
             case "log":
                 if target == 0:
@@ -142,17 +202,32 @@ class FlareHelioviewerRegDataset(Dataset):
 
 
 class FlareSuryaClsDataset(HelioNetCDFDataset):
-    """
-    The solar flare index data (flare_index_path) should be of the form
+    """Dataset for solar flare classification using Surya/SDO data.
 
-    timestamp,max_goes_class,cumulative_index,label_max,label_cum
-    2011-01-01 00:00:00,B8.3,0.0,0,0
-    2011-01-01 01:00:00,B8.3,0.0,0,0
-    2011-01-01 02:00:00,B8.3,0.0,0,0
-    2011-01-01 03:00:00,B8.3,0.0,0,0
-    2011-01-01 04:00:00,B8.3,0.0,0,0
-    2011-01-01 05:00:00,B8.3,0.0,0,0
-    2011-01-01 06:00:00,B8.3,0.0,0,0
+    This dataset extends HelioNetCDFDataset to include flare classification
+    labels from a flare index file.
+
+    Args:
+        sdo_data_root_path: Root directory for SDO data.
+        index_path: Path to the NetCDF index file.
+        flare_index_path: Path to the CSV file containing flare labels.
+        time_delta_input_minutes: List of time offsets for input.
+        time_delta_target_minutes: Time offset for the target.
+        n_input_timestamps: Number of input timestamps.
+        rollout_steps: Number of rollout steps.
+        scalers: Scalers for data normalization.
+        num_mask_aia_channels: Number of AIA channels to mask.
+        drop_hmi_probability: Probability of dropping HMI data.
+        use_latitude_in_learned_flow: Whether to use latitude in learned flow.
+        channels: List of channels to use.
+        phase: Dataset phase ('train', 'val', or 'test').
+        pooling: Pooling factor.
+        random_vert_flip: Whether to apply random vertical flip.
+
+    Attributes:
+        flare_index: Flare labels index.
+        valid_indices: List of valid timestamps.
+        adjusted_length: Number of valid samples.
     """
 
     def __init__(
@@ -173,7 +248,6 @@ class FlareSuryaClsDataset(HelioNetCDFDataset):
         pooling: int | None = None,
         random_vert_flip: bool = False,
     ):
-
         self.flare_index = pd.read_csv(flare_index_path)
         self.flare_index["timestamp"] = pd.to_datetime(
             self.flare_index["timestamp"]
@@ -202,21 +276,23 @@ class FlareSuryaClsDataset(HelioNetCDFDataset):
         self.adjusted_length = len(self.valid_indices)
 
     def filter_valid_indices(self) -> list:
+        """Filters timestamps to include only those present in the flare index.
+
+        Returns:
+            List of valid timestamps.
+        """
         valid_indices = super().filter_valid_indices()
 
         valid_indices = [t for t in valid_indices if t in self.flare_index.index]
 
         return valid_indices
 
-    def _get_index_data(self, idx: int) -> tuple[dict, dict]:
-        data, metadata = super()._get_index_data(idx)
-
-        reference_timestamp = self.valid_indices[idx]
-        data["label"] = self.flare_index.loc[reference_timestamp, "label_max"]
-
-        return data, metadata
-
     def __len__(self):
+        """Returns the number of samples in the dataset.
+
+        Returns:
+            The adjusted length of the dataset.
+        """
         return self.adjusted_length
 
 
@@ -237,5 +313,4 @@ def main(cfg):
 
 
 if __name__ == "__main__":
-
     main()

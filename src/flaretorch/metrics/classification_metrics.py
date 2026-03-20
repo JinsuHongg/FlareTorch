@@ -3,6 +3,20 @@ import torch.nn as nn
 
 
 class DistributedClassificationMetrics(nn.Module):
+    """Distributed classification metrics for binary classification.
+
+    This class tracks true positives, true negatives, false positives, and
+    false negatives to compute various classification metrics like accuracy,
+    precision, recall, F1 score, TSS, and HSS.
+
+    Args:
+        threshold: Threshold for converting probabilities to binary predictions.
+
+    Attributes:
+        threshold: Threshold for binary classification.
+        _counts: Buffer storing counts of TP, TN, FP, and FN.
+    """
+
     def __init__(self, threshold: float = 0.5):
         super().__init__()
         self.threshold = threshold
@@ -10,21 +24,47 @@ class DistributedClassificationMetrics(nn.Module):
 
     @property
     def tp(self):
+        """Returns the count of true positives.
+
+        Returns:
+            True positive count.
+        """
         return self._counts[0]
 
     @property
     def tn(self):
+        """Returns the count of true negatives.
+
+        Returns:
+            True negative count.
+        """
         return self._counts[1]
 
     @property
     def fp(self):
+        """Returns the count of false positives.
+
+        Returns:
+            False positive count.
+        """
         return self._counts[2]
 
     @property
     def fn(self):
+        """Returns the count of false negatives.
+
+        Returns:
+            False negative count.
+        """
         return self._counts[3]
 
     def update(self, prediction, target):
+        """Updates the counts based on new predictions and targets.
+
+        Args:
+            prediction: Predicted probabilities or binary values.
+            target: Ground truth binary labels.
+        """
         prediction = (prediction > self.threshold).int()
         target = target.int()
 
@@ -34,6 +74,12 @@ class DistributedClassificationMetrics(nn.Module):
         self._counts[3] += ((prediction == 0) & (target == 1)).sum()
 
     def compute_and_reset(self):
+        """Computes metrics and resets the counts.
+
+        Returns:
+            A dictionary containing TP, TN, FP, FN, accuracy, precision,
+            recall, F1, TSS, and HSS.
+        """
         result = {
             "tp": self.tp,
             "tn": self.tn,
@@ -61,4 +107,5 @@ class DistributedClassificationMetrics(nn.Module):
         return result
 
     def reset(self):
+        """Resets the counts to zero."""
         self._counts.zero_()

@@ -7,14 +7,14 @@ def build_wandb(cfg, model):
     name = f"{cfg.model.type}_lr{cfg.optimizer.lr}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
     
     wandb_logger = WandbLogger(
-        entity=cfg["wandb"]["entity"],
-        project=cfg["wandb"]["project"],
-        save_dir=cfg["wandb"]["save_dir"],
-        offline=cfg["wandb"]["offline"],
-        log_model=cfg["wandb"]["log_model"],
-        save_code=cfg["wandb"]["save_code"],
-        notes=cfg["wandb"]["notes"],
-        tags=cfg["wandb"]["tag"],
+        entity=cfg.wandb.entiry,
+        project=cfg.wandb.project,
+        save_dir=cfg.wandb.save_dir,
+        offline=cfg.wandb.offline,
+        log_model=cfg.wandb.log_model,
+        save_code=cfg.wandb.save_code,
+        notes=cfg.wandb.notes,
+        tags=cfg.wandb.tags,
         name=name,
         config=OmegaConf.to_container(cfg, resolve=True, throw_on_missing=True)
     )

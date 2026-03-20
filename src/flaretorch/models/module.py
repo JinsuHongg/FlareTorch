@@ -13,6 +13,27 @@ from ..utils.losses import PinballLoss
 
 
 class ResNetMCD(BaseModule):
+    """ResNet with Monte Carlo Dropout for uncertainty estimation.
+
+    This model performs multiple forward passes with dropout enabled during
+    inference to estimate predictive uncertainty.
+
+    Args:
+        model_type: Type of ResNet backbone (e.g., 'resnet18', 'resnet34').
+        module_dict: Configuration for the MCDropout module.
+        base_model_dict: Configuration for the base regressor.
+        loss_type: Type of loss function to use (e.g., 'mse').
+        optimizer_dict: Configuration for the optimizer.
+        scheduler_dict: Configuration for the learning rate scheduler.
+
+    Attributes:
+        num_forwards: Number of MC forward passes during prediction.
+        base_model: The underlying ResNet regressor.
+        loss_fn: The loss function used for training.
+        train_r2: R2 score metric for training.
+        val_r2: R2 score metric for validation.
+    """
+
     def __init__(
         self,
         model_type,
@@ -51,13 +72,29 @@ class ResNetMCD(BaseModule):
         self.val_r2 = R2Score()
 
     def forward(self, x):
+        """Forward pass of the model.
+
+        Args:
+            x: Input tensor.
+
+        Returns:
+            Model output.
+        """
         # Standard forward pass
         return self.base_model(x)
 
     def predict_step(self, batch, batch_idx):
-        """
-        Custom prediction step for MC Dropout.
-        This runs automatically when you call trainer.predict()
+        """Custom prediction step for MC Dropout.
+
+        This runs multiple forward passes with dropout enabled to calculate
+        mean and standard deviation of predictions.
+
+        Args:
+            batch: The input batch.
+            batch_idx: Index of the batch.
+
+        Returns:
+            A dictionary containing 'mean' and 'std' of predictions.
         """
         x, _, timestamps = batch
 
@@ -91,6 +128,15 @@ class ResNetMCD(BaseModule):
         }
 
     def training_step(self, batch, batch_idx):
+        """Training step.
+
+        Args:
+            batch: The input batch.
+            batch_idx: Index of the batch.
+
+        Returns:
+            The calculated loss.
+        """
         # Standard training loop
         x, y, timestamps = batch
         y_hat = self(x)
@@ -101,6 +147,12 @@ class ResNetMCD(BaseModule):
         return loss
 
     def validation_step(self, batch, batch_idx):
+        """Validation step.
+
+        Args:
+            batch: The input batch.
+            batch_idx: Index of the batch.
+        """
         x, y, timestamps = batch
         y_hat = self(x)
         loss = self.loss_fn(y_hat.squeeze(), y)
@@ -110,6 +162,27 @@ class ResNetMCD(BaseModule):
 
 
 class ResNetQR(BaseModule):
+    """ResNet with Quantile Regression for uncertainty estimation.
+
+    This model predicts multiple quantiles of the target distribution to
+    provide prediction intervals.
+
+    Args:
+        model_type: Type of ResNet backbone (e.g., 'resnet18', 'resnet34').
+        base_model_dict: Configuration for the base regressor.
+        optimizer_dict: Configuration for the optimizer.
+        scheduler_dict: Configuration for the learning rate scheduler.
+        module_dict: Configuration for the Quantile Regression module.
+
+    Attributes:
+        quantiles: List of quantiles to predict.
+        loss_fn: Pinball loss function.
+        median_idx: Index of the 0.5 quantile.
+        train_r2: R2 score metric for training.
+        val_r2: R2 score metric for validation.
+        base_model: The underlying ResNet regressor.
+    """
+
     def __init__(
         self,
         model_type,
@@ -157,9 +230,26 @@ class ResNetQR(BaseModule):
                 )
 
     def forward(self, x):
+        """Forward pass of the model.
+
+        Args:
+            x: Input tensor.
+
+        Returns:
+            Model output containing predicted quantiles.
+        """
         return self.base_model(x)
 
     def training_step(self, batch, batch_idx):
+        """Training step.
+
+        Args:
+            batch: The input batch.
+            batch_idx: Index of the batch.
+
+        Returns:
+            The calculated loss.
+        """
         x, y, _ = batch
         preds = self(x)
         loss = self.loss_fn(preds, y)
@@ -169,6 +259,15 @@ class ResNetQR(BaseModule):
         return loss
 
     def validation_step(self, batch, batch_idx):
+        """Validation step.
+
+        Args:
+            batch: The input batch.
+            batch_idx: Index of the batch.
+
+        Returns:
+            The calculated loss.
+        """
         # Lightning sets .eval() automatically here
         x, y, _ = batch
         preds = self(x)
@@ -179,6 +278,15 @@ class ResNetQR(BaseModule):
         return loss
 
     def predict_step(self, batch, batch_idx):
+        """Prediction step.
+
+        Args:
+            batch: The input batch.
+            batch_idx: Index of the batch.
+
+        Returns:
+            A dictionary mapping quantile strings to predicted values.
+        """
         x, _, _ = batch
         preds = self(x)
 
