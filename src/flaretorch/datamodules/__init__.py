@@ -1,1 +1,1 @@
-from .flare import FlareHelioviewerRegDataModule
+from .flare import FlareHelioviewerRegDataModule, FlareSuryaBenchDataModule

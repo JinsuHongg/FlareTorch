@@ -13,32 +13,25 @@ experiment:
 
 data:
   repo: nasa-ibm-ai4science/surya-bench-flare-forecasting
-  ref_mask_img: HMI-Mag.2010.12.06_07.00.00.jpg
+  ref_mask_img: null
   flare_index:
-    path: ../../assets/data/
+    path: /scratch/users/jhong36/data/
     train: train.csv
     val: validation.csv
     test: test.csv
-  input_index_path: ../../assets/data/helioviewer_mag_input.csv
-  input:
-    path: /anvil/projects/x-cis251356/helioviewer/mag
-    ext: jpg
-    dim: 512
+  zarr_path: /scratch/users/jhong36/data/sdo_512.zarr
   input_time_delta: [0] #[-60, 0]
-  input_stat_path: ../../assets/data/los_mag_stat.yaml
+  input_stat_path: ../../../assets/stats/los_mag_stat.yaml
   label_type: max_intensity
-  limb_mask_path: ../../assets/data/limb_mask.npy
+  limb_mask_path: ../../../assets/limb_mask.npy
   target_norm_type: log
-  scaler_mul: 1
-  scaler_shift: -127.5
-  scaler_div: 127.5
   # for dataloader
   num_workers: 6
   batch_size: 256
   pin_memory: true
 
 model:
-  save_ckpt_path: /anvil/projects/x-cis251356/check_point/FlareTorch/qr/
+  save_ckpt_path: ../../../assets/checkpoints/qr/
   ckpt: null
   module_type: qr # mcp, qr
   # module specific
@@ -93,4 +86,4 @@ wandb:
   notes: Resnet18 backbone and QR
   offline: true
   save_code: false
-  tag: ["resnet18", "qr", "regression"] # backbone model, head type, task
+  tag: ["resnet18", "qr", "reg"] # backbone model, head type, task

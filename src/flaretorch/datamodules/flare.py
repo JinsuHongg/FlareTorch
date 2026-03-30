@@ -4,7 +4,7 @@ from torch.utils.data import DataLoader
 
 from omegaconf import OmegaConf
 from loguru import logger as lgr_logger
-from ..datasets import FlareHelioviewerRegDataset
+from ..datasets import FlareHelioviewerRegDataset, FlareSuryaClsDataset
 
 
 class FlareHelioviewerRegDataModule(L.LightningDataModule):
@@ -162,6 +162,169 @@ class FlareHelioviewerRegDataModule(L.LightningDataModule):
         )
 
     def cal_dataloader(self):
+        """Returns the calibration dataloader.
+
+        Returns:
+            A DataLoader instance for calibration.
+        """
+        return DataLoader(
+            self.cal_ds,
+            num_workers=self.cfg.data.num_workers,
+            batch_size=self.batch_size,
+            shuffle=False,
+            pin_memory=self.cfg.data.pin_memory,
+        )
+
+
+class FlareSuryaBenchDataModule(L.LightningDataModule):
+    """PyTorch Lightning DataModule for FlareSuryaBenchDataset.
+
+    This class manages the loading and preparation of training, validation,
+    test, and calibration datasets for solar flare regression and classification.
+
+    Args:
+        cfg: Configuration object containing data and training parameters.
+
+    Attributes:
+        cfg: Configuration object.
+        batch_size: Size of each data batch.
+        train_ds: Training dataset.
+        val_ds: Validation dataset.
+        test_ds: Test dataset.
+        pred_ds: Prediction dataset.
+        cal_ds: Calibration dataset.
+    """
+
+    def __init__(self, cfg: str):
+        super().__init__()
+        self.cfg = cfg
+        self.batch_size = self.cfg.data.batch_size
+
+    def get_dataset(self, phase: str, flare_index_path: str) -> FlareSuryaBenchDataset:
+        """Creates a FlareSuryaBenchDataset instance.
+
+        Args:
+            phase: Dataset phase ('train', 'validation', 'test', or 'calibration').
+            flare_index_path: Path to the flare index CSV file.
+
+        Returns:
+            A FlareSuryaBenchDataset instance.
+        """
+        return FlareSuryaBenchDataset(
+            input_zarr_path=self.cfg.data.input_zarr_path,
+            input_time_delta=self.cfg.data.input_time_delta,
+            input_stat_path=self.cfg.data.input_stat_path,
+            flare_index_path=flare_index_path,
+            limb_mask_path=self.cfg.data.limb_mask_path,
+            label_type=self.cfg.data.label_type,
+            target_norm_type=self.cfg.data.target_norm_type,
+            phase=phase,
+        )
+
+    def setup(self, stage: str) -> None:
+        """Sets up the datasets for different stages.
+
+        Args:
+            stage: The stage for which to set up the data ('fit', 'validate',
+                'test', 'predict', or 'calibrate').
+        """
+        if stage in (None, "fit"):
+            self.train_ds = self.get_dataset(
+                "train",
+                os.path.join(
+                    self.cfg.data.flare_index.path, self.cfg.data.flare_index.train
+                ),
+            )
+
+        if stage in ("fit", "validate", None):
+            self.val_ds = self.get_dataset(
+                "validation",
+                os.path.join(
+                    self.cfg.data.flare_index.path, self.cfg.data.flare_index.val
+                ),
+            )
+
+        if stage in (None, "test", "predict"):
+            self.test_ds = self.get_dataset(
+                "test",
+                os.path.join(
+                    self.cfg.data.flare_index.path, self.cfg.data.flare_index.test
+                ),
+            )
+
+        if stage in (None, "predict"):
+            self.pred_ds = self.get_dataset(
+                "test",
+                os.path.join(
+                    self.cfg.data.flare_index.path, self.cfg.data.flare_index.test
+                ),
+            )
+
+        if stage in (None, "calibrate"):
+            self.cal_ds = self.get_dataset(
+                "calibration",
+                os.path.join(
+                    self.cfg.data.flare_index.path, self.cfg.data.flare_index.cal
+                ),
+            )
+
+    def train_dataloader(self) -> DataLoader:
+        """Returns the training dataloader.
+
+        Returns:
+            A DataLoader instance for training.
+        """
+        return DataLoader(
+            self.train_ds,
+            num_workers=self.cfg.data.num_workers,
+            batch_size=self.batch_size,
+            shuffle=True,
+            pin_memory=self.cfg.data.pin_memory,
+        )
+
+    def val_dataloader(self) -> DataLoader:
+        """Returns the validation dataloader.
+
+        Returns:
+            A DataLoader instance for validation.
+        """
+        return DataLoader(
+            self.val_ds,
+            num_workers=self.cfg.data.num_workers,
+            batch_size=self.batch_size,
+            shuffle=False,
+            pin_memory=self.cfg.data.pin_memory,
+        )
+
+    def test_dataloader(self) -> DataLoader:
+        """Returns the test dataloader.
+
+        Returns:
+            A DataLoader instance for testing.
+        """
+        return DataLoader(
+            self.test_ds,
+            num_workers=self.cfg.data.num_workers,
+            batch_size=self.batch_size,
+            shuffle=False,
+            pin_memory=self.cfg.data.pin_memory,
+        )
+
+    def predict_dataloader(self) -> DataLoader:
+        """Returns the prediction dataloader.
+
+        Returns:
+            A DataLoader instance for prediction.
+        """
+        return DataLoader(
+            self.pred_ds,
+            num_workers=self.cfg.data.num_workers,
+            batch_size=self.batch_size,
+            shuffle=False,
+            pin_memory=self.cfg.data.pin_memory,
+        )
+
+    def cal_dataloader(self) -> DataLoader:
         """Returns the calibration dataloader.
 
         Returns:

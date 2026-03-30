@@ -9,6 +9,28 @@ from dask.diagnostics.progress import ProgressBar
 from loguru import logger as lgr_logger
 
 
+def signumlog_transform(arr):
+    """
+    Applies the signed logarithmic (signumlog) transformation to a dask or numpy array.
+
+    Preserves the sign of the input while compressing the magnitude logarithmically.
+    Useful for solar magnetogram data where values span a wide dynamic range
+    with both positive (north) and negative (south) polarities.
+
+    Formula:
+        signumlog(x) = sign(x) * log1p(|x|)
+
+    Args:
+        arr (da.Array | np.ndarray): Input array of any shape, float32 recommended.
+
+    Returns:
+        da.Array | np.ndarray: Transformed array, same shape and type as input.
+    """
+    if isinstance(arr, da.Array):
+        return da.sign(arr) * da.log1p(da.fabs(arr))
+    return np.sign(arr) * np.log1p(np.abs(arr))
+
+
 def create_solar_limb_mask(image_path, threshold_value=10):
     """
     Creates a binary mask for the solar disk from a Helioviewer JPEG/PNG.
@@ -38,7 +60,7 @@ def create_solar_limb_mask(image_path, threshold_value=10):
     return mask, img, center, radius
 
 
-def build_dask_stack_from_zarr(zarr_path, years=None, threshold_value=10):
+def build_dask_stack_from_zarr(zarr_path, years=None, threshold_value=10, limb_mask_path=""):
     """
     Opens each year group from the zarr store, concatenates hmi_m along timestep,
     and creates a solar limb mask from the first valid image.
@@ -57,7 +79,7 @@ def build_dask_stack_from_zarr(zarr_path, years=None, threshold_value=10):
 
     zarr_path = Path(zarr_path)
     arrays = []
-    mask = None
+    mask = np.load(limb_mask_path) if Path(limb_mask_path).exists() else None
 
     for year in years:
         group_path = zarr_path / str(year)
@@ -66,24 +88,19 @@ def build_dask_stack_from_zarr(zarr_path, years=None, threshold_value=10):
             continue
 
         lgr_logger.info(f"Opening year: {year}")
-        ds = xr.open_zarr(group_path)
+        ds = xr.open_zarr(zarr_path, group=f"{year}/hmi_m", chunks="auto")
 
-        if "hmi_m" not in ds:
-            lgr_logger.warning(f"'hmi_m' not found in year {year}, skipping.")
-            continue
+        # if "hmi_m" not in ds:
+        #     lgr_logger.warning(f"'hmi_m' not found in year {year}, skipping.")
+        #     continue
 
-        # Build limb mask from the first valid image in the first valid year
         if mask is None:
             lgr_logger.info(f"Creating limb mask from first image of year {year}...")
-            first_image = ds["hmi_m"].isel(timestep=0).values  # (H, W), float32
+            first_image = ds["hmi_m"].isel(timestep=0).values
 
-            # Use absolute value — space is ~0 G, disk has signal regardless of polarity
             img_abs = np.abs(first_image)
-
-            # Normalize by this image's own max (robust: no hardcoded range needed)
             img_uint8 = (img_abs / np.nanmax(img_abs) * 255).astype(np.uint8)
 
-            # Otsu finds the disk/space boundary automatically from the histogram
             _, binary_map = cv2.threshold(img_uint8, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
             contours, _ = cv2.findContours(binary_map, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -98,7 +115,7 @@ def build_dask_stack_from_zarr(zarr_path, years=None, threshold_value=10):
             mask = np.zeros(first_image.shape, dtype=np.uint8)
             cv2.circle(mask, center, radius, 255, thickness=-1)
             mask = mask // 255
-
+            np.save(limb_mask_path, mask)
             lgr_logger.info(f"Limb mask created — center: {center}, radius: {radius}px")
 
         arr = ds["hmi_m"].data.astype("float32")
@@ -116,18 +133,24 @@ def build_dask_stack_from_zarr(zarr_path, years=None, threshold_value=10):
     return full_stack, mask
 
 
-def compute_stats(img_array, mask):
+def compute_stats(img_array, mask, apply_signumlog=True):
     """
     Compute per-pixel statistics over the full time stack, inside the solar limb mask.
+    Optionally applies signumlog transformation before computing statistics.
     
     Args:
-        img_array: dask array, shape (T, H, W), float32
-        mask: numpy array, shape (H, W), values 0 or 1
+        img_array (da.Array): shape (T, H, W), float32
+        mask (np.ndarray): shape (H, W), values 0 or 1
+        apply_signumlog (bool): If True, applies signumlog transform before stats.
     
     Returns:
-        dict with min, max, mean, std, sum
+        dict with min, max, mean, std, sum, and transform metadata.
     """
     lgr_logger.info(f"Computing statistics on array shape: {img_array.shape}")
+
+    if apply_signumlog:
+        lgr_logger.info("Applying signumlog transformation...")
+        img_array = signumlog_transform(img_array)
 
     with ProgressBar():
         mask_expanded = da.from_array(mask[np.newaxis, :, :], chunks=(1, mask.shape[0], mask.shape[1]))
@@ -142,17 +165,18 @@ def compute_stats(img_array, mask):
         )
 
     return {
-        "min":  float(min_val),
-        "max":  float(max_val),
-        "mean": float(mean_val),
-        "std":  float(std_val),
-        "sum":  float(sum_val),
+        "min":       float(min_val),
+        "max":       float(max_val),
+        "mean":      float(mean_val),
+        "std":       float(std_val),
+        "sum":       float(sum_val),
+        "transform": "signumlog" if apply_signumlog else "none",
     }
 
 
 @hydra.main(
-    config_path="../../configs/",
-    config_name="alexnet_helioviewer_config.yaml",
+    config_path="../../../configs/",
+    config_name="QR_resnet18_train_surya_bench.yaml",
     version_base=None,
 )
 def main(cfg):
@@ -166,9 +190,10 @@ def main(cfg):
         img_array, mask = build_dask_stack_from_zarr(
             zarr_path=Path(cfg.data.zarr_path),
             years=list(range(2010, 2025)),
+            limb_mask_path=cfg.data.limb_mask_path,
         )
 
-        stats = compute_stats(img_array, mask)
+        stats = compute_stats(img_array, mask, apply_signumlog=True)
         lgr_logger.info(f"Stats computed: {stats}")
 
         stat_path.write_text(yaml.dump(stats))

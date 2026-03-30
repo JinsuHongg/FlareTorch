@@ -23,7 +23,6 @@ def build_callbacks(cfg, wandb_logger):
         )
 
     return [
-        RichProgressBar(),
         LearningRateMonitor(logging_interval="step"),
         ModelCheckpoint(
             monitor=cfg["scheduler"]["monitor"],

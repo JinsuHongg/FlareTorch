@@ -7,7 +7,7 @@ from omegaconf import OmegaConf
 import torch
 from lightning.pytorch import Trainer
 
-from flaretorch.datamodules import FlareHelioviewerRegDataModule
+from flaretorch.datamodules import FlareHelioviewerRegDataModule, FlareSuryaBenchDataModule
 from flaretorch.models import ResNetMCD, ResNetQR
 from flaretorch.utils import build_wandb, build_callbacks
 
@@ -46,22 +46,23 @@ def build_model(cfg):
 
 @hydra.main(
     config_path="../../../configs",
-    config_name="resnet_helioviewer_config.yaml",
+    config_name="QR_resnet18_train_surya_bench.yaml",
     version_base=None,
 )
 def train(cfg):
     # Datamodule
-    datamodule = FlareHelioviewerRegDataModule(cfg=cfg)
+    datamodule = FlareSuryaBenchDataModule(cfg=cfg)
 
     # Load model
     model = build_model(cfg=cfg)
 
     # Create wandb obejct
-    wandb_logger = build_wandb(cfg=cfg, model=model)
+    wandb_logger = build_wandb(cfg=cfg)
 
     # Trainer
     callbacks = build_callbacks(cfg=cfg, wandb_logger=wandb_logger)
     trainer = Trainer(
+        enable_progress_bar=False,
         accelerator=cfg.trainer.accelerator,
         devices=cfg.trainer.devices,
         num_nodes=cfg.trainer.num_nodes,

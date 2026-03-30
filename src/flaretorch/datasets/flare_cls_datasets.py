@@ -1,7 +1,9 @@
-import os
+import dask.array as da
 import hydra
 import numpy as np
 import pandas as pd
+import xarray as xr
+import zarr
 
 import torch
 from torchvision import transforms
@@ -199,6 +201,229 @@ class FlareHelioviewerRegDataset(Dataset):
                 if target == 0:
                     print("target is zero?")
                 return np.log10(target) + 9
+
+
+class FlareSurayBenchDataset(Dataset):
+    """Dataset for solar flare regression/classification using surya-bench data.
+
+    Loads sequences of HMI magnetogram images from a Zarr store and pairs them
+    with flare intensity labels for regression or binary classification tasks.
+
+    Args:
+        input_zarr_path: Path to the root Zarr store containing year groups.
+        input_time_delta: List of time offsets (in minutes) for the input sequence.
+            e.g. [-10, 0] loads two frames: 10 minutes before and at current_time.
+        input_stat_path: Path to the YAML file containing dataset mean and std statistics.
+        flare_index_path: Path to the CSV file containing flare labels with a
+            'timestamp' column and one or more label columns.
+        limb_mask_path: Path to the NPY file containing the solar limb mask (512x512).
+        scaler_mul: Multiplicative scaler applied during preprocessing.
+        scaler_shift: Shift scaler applied during preprocessing.
+        scaler_div: Divisive scaler applied during preprocessing.
+        label_type: Column name in flare_index for the target label.
+        target_norm_type: Normalization strategy for the target label.
+            'log'    — log10(target) + 9, returns float.
+            'binary' — casts existing 0/1 column to int, returns long.
+        phase: Dataset phase, one of 'train', 'val', or 'test'.
+            Training phase applies random augmentations.
+
+    Attributes:
+        years: Sorted list of year group strings found in the Zarr store.
+        index_timestamps: Flat DatetimeIndex of all available image timestamps.
+        input_time_delta: List of time offsets (minutes) for the input sequence.
+        stats: Loaded data statistics (mean, std) from the YAML file.
+        limb_mask: Solar limb mask array of shape (512, 512).
+        label_type: Column name for the target label.
+        target_norm_type: Normalization strategy for the target label.
+        phase: Dataset phase ('train', 'val', or 'test').
+        flare_index: DataFrame of flare labels indexed by timestamp.
+        augment: Augmentation pipeline for training, or None for val/test.
+        valid_timestamps: Sorted list of timestamps that have both a complete
+            input sequence and a matching entry in flare_index.
+    """
+
+    def __init__(
+        self,
+        input_zarr_path: str,
+        input_time_delta: list[int],
+        input_stat_path: str,
+        flare_index_path: str,
+        limb_mask_path: str,
+        label_type: str,
+        target_norm_type: str,
+        phase: str,
+    ):
+        super().__init__()
+
+        # Find year groups from Zarr store
+        root = zarr.open(input_zarr_path, mode="r")
+        self.years = sorted(root.group_keys(), key=int)
+
+        # Open each year group as a lazy xarray DataArray
+        self._arrays: dict[str, xr.DataArray] = {}
+        for year in self.years:
+            ds = xr.open_zarr(input_zarr_path, group=year)
+            self._arrays[year] = ds["hmi_m"]  # DataArray: (timestep, x, y)
+
+        # Build flat index — single concatenated DatetimeIndex
+        index_timestamps = []
+        for da in self._arrays.values():
+            index_timestamps.append(pd.DatetimeIndex(da.coords["timestep"].values))
+        self.index_timestamps = pd.DatetimeIndex(np.concatenate(index_timestamps))
+
+        self.input_time_delta = input_time_delta
+        self.stats = OmegaConf.load(input_stat_path)
+        self.limb_mask = np.load(limb_mask_path)
+        self.label_type = label_type
+        self.target_norm_type = target_norm_type
+        self.phase = phase
+
+        self.flare_index = pd.read_csv(flare_index_path)
+        self.flare_index["timestamp"] = pd.to_datetime(self.flare_index["timestamp"])
+        self.flare_index.set_index("timestamp", inplace=True)
+        self.flare_index.sort_index(inplace=True)
+
+        self._get_valid_indices()
+        lgr_logger.info(f"{self.phase} instances: {self.__len__()}")
+
+        # Augmentation for training only
+        if self.phase == "train":
+            self.augment = transforms.Compose(
+                [
+                    transforms.RandomRotation(degrees=11),
+                    transforms.RandomHorizontalFlip(p=0.5),
+                    transforms.RandomVerticalFlip(p=0.5),
+                ]
+            )
+        else:
+            self.augment = None
+
+    def get_by_timestamp(self, timestamp: str | pd.Timestamp) -> np.ndarray:
+        """Fetch a single HMI image by its exact timestamp.
+
+        Args:
+            timestamp: Timestamp string (e.g. '2015-06-21 12:00:00') or pd.Timestamp.
+
+        Returns:
+            Image array of shape (512, 512) as float32.
+
+        Raises:
+            KeyError: If the year of the timestamp is not loaded in this dataset.
+        """
+        ts = pd.Timestamp(timestamp)
+        year = str(ts.year)
+        if year not in self._arrays:
+            raise KeyError(f"Year {year} not loaded in this dataset.")
+        image = self._arrays[year].sel(timestep=ts).values.astype(np.float32)
+        return image
+
+    def __len__(self) -> int:
+        """Returns the number of valid samples in the dataset.
+
+        Returns:
+            Number of valid timestamps.
+        """
+        return len(self.valid_timestamps)
+
+    def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor, int]:
+        """Returns a single sample from the dataset.
+
+        Args:
+            idx: Index of the sample.
+
+        Returns:
+            Tuple of:
+                x       — input tensor of shape (1, num_frames, 512, 512).
+                target  — scalar target tensor (float32 for 'log', long for 'binary').
+                timestamp — current_time as int64 (nanoseconds since epoch).
+        """
+        current_time = self.valid_timestamps[idx]
+
+        required_times = [
+            current_time + pd.Timedelta(minutes=dt) for dt in self.input_time_delta
+        ]
+
+        images = []
+        for t in required_times:
+            img = self.get_by_timestamp(t)
+            images.append(self.transform(img))
+
+        # (1, 512, 512) per frame → stack → (1, num_frames, 512, 512)
+        x = torch.stack(images, dim=1).float()
+
+        raw_target = self.flare_index.loc[current_time, self.label_type]
+        target = self.transform_target(raw_target)
+
+        dtype = torch.long if self.target_norm_type == "binary" else torch.float32
+        return x, torch.tensor(target, dtype=dtype), current_time.value
+
+    def _get_valid_indices(self) -> None:
+        """Builds self.valid_timestamps by filtering index_timestamps to only those
+        where every required input frame exists and a flare label is available.
+        """
+        time_deltas = pd.to_timedelta(self.input_time_delta, unit="min")
+        idx = self.index_timestamps
+
+        valid_mask = np.ones(len(idx), dtype=bool)
+        for dt in time_deltas:
+            required_times = idx + dt
+            has_required_time = required_times.isin(idx)
+            valid_mask = valid_mask & has_required_time
+
+        valid_sequence_timestamps = idx[valid_mask]
+        final_valid_timestamps = valid_sequence_timestamps.intersection(
+            self.flare_index.index
+        )
+        self.valid_timestamps = sorted(final_valid_timestamps)
+
+    def transform(self, arr: np.ndarray) -> torch.Tensor:
+        """Applies signed log1p transform and standardization to an input image.
+
+        The signed log1p transform compresses the dynamic range of magnetogram
+        values while preserving the sign: f(x) = sign(x) * log1p(|x|).
+        The result is then standardized using the precomputed dataset mean and std.
+
+        Args:
+            arr: Input image array of shape (512, 512), float32.
+
+        Returns:
+            Transformed image tensor of shape (1, 512, 512).
+        """
+        arr_transformed = np.sign(arr) * np.log1p(np.abs(arr))
+        arr_normalized = (arr_transformed - self.stats.mean) / self.stats.std
+        return torch.from_numpy(arr_normalized).unsqueeze(0)
+
+    def transform_target(self, target: float) -> float | int:
+        """Applies normalization to the target label.
+
+        Args:
+            target: Raw target value from flare_index.
+
+        Returns:
+            For 'log'    — float: log10(target) + 9.
+            For 'binary' — int: 0 or 1 (cast from existing binary column).
+
+        Raises:
+            ValueError: If target_norm_type is not 'log' or 'binary'.
+            ValueError: If target_norm_type is 'log' and target is zero.
+        """
+        match self.target_norm_type:
+            case "log":
+                if target == 0:
+                    raise ValueError(
+                        f"target is zero at — log10(0) is undefined. "
+                        f"Check your flare_index for label_type='{self.label_type}'."
+                    )
+                return np.log10(target) + 9
+
+            case "binary":
+                return int(target)
+
+            case _:
+                raise ValueError(
+                    f"Unknown target_norm_type: '{self.target_norm_type}'. "
+                    f"Expected 'log' or 'binary'."
+                )
 
 
 class FlareSuryaClsDataset(HelioNetCDFDataset):

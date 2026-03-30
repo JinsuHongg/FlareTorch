@@ -3,7 +3,7 @@ from omegaconf import OmegaConf
 from lightning.pytorch.loggers import WandbLogger
 
 
-def build_wandb(cfg, model):
+def build_wandb(cfg):
     name = f"{cfg.model.type}_lr{cfg.optimizer.lr}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
     
     wandb_logger = WandbLogger(
