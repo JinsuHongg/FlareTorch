@@ -8,6 +8,7 @@ assets/
 logs/
 .vscode/
 .venv/
+tmp/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
