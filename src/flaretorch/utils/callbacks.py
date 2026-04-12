@@ -1,6 +1,5 @@
 from lightning.pytorch.callbacks import (
     ModelCheckpoint,
-    RichProgressBar,
     LearningRateMonitor,
 )
 

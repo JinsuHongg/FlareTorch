@@ -4,7 +4,7 @@ from torch.utils.data import DataLoader
 
 from omegaconf import OmegaConf
 from loguru import logger as lgr_logger
-from ..datasets import FlareHelioviewerRegDataset, FlareSuryaClsDataset
+from ..datasets import FlareHelioviewerRegDataset, FlareSuryaClsDataset, FlareSuryaBenchDataset
 
 
 class FlareHelioviewerRegDataModule(L.LightningDataModule):
