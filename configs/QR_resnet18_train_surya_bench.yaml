@@ -19,11 +19,11 @@ data:
     train: train.csv
     val: validation.csv
     test: test.csv
-  zarr_path: /scratch/users/jhong36/data/sdo_512.zarr
+  input_zarr_path: /scratch/users/jhong36/data/sdo_512.zarr
   input_time_delta: [0] #[-60, 0]
-  input_stat_path: ../../../assets/stats/los_mag_stat.yaml
+  input_stat_path: ../assets/stats/los_mag_stat.yaml
   label_type: max_intensity
-  limb_mask_path: ../../../assets/limb_mask.npy
+  limb_mask_path: ../assets/limb_mask.npy
   target_norm_type: log
   # for dataloader
   num_workers: 6
@@ -31,7 +31,7 @@ data:
   pin_memory: true
 
 model:
-  save_ckpt_path: ../../../assets/checkpoints/qr/
+  save_ckpt_path: ../assets/checkpoints/qr/
   ckpt: null
   module_type: qr # mcp, qr
   # module specific
@@ -79,7 +79,7 @@ trainer:
   strategy: auto
 
 wandb:
-  save_dir: ../../assets
+  save_dir: ../assets
   entity: gsu-dmlab
   project: uncertainty-flare-regression
   log_model: false

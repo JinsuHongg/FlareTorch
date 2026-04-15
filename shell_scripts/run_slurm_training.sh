@@ -4,7 +4,7 @@
 #SBATCH -A cis251356-ai
 #SBATCH -p ai               # the default queue is "shared" queue
 #SBATCH --nodes=1
-#SBATCH --ntasks=1 
+#SBATCH --ntasks=1
 #SBATCH --cpus-per-task=14
 #SBATCH --gres=gpu:2
 #SBATCH --mem=16G
@@ -13,12 +13,9 @@
 #SBATCH --output=logs/%x_%j.out   # %x = job name, %j = job ID
 #SBATCH --error=logs/%x_%j.err    # separate error log (optional)
 
-
 # Activate your Python environment
 source .venv/bin/activate
 
-# Move to your working directory
-cd FlareTorch/src/FlareTorch/tasks
+cd /home/jhong90/github_proj/FlareTorch
 
-# Run your training script
-python -u training.py --config-dir=/home/x-jhong6/project/FlareTorch/FlareTorch/configs --config-name="$1"
+python -u scripts/training.py

@@ -5,9 +5,9 @@ from lightning.pytorch.loggers import WandbLogger
 
 def build_wandb(cfg):
     name = f"{cfg.model.type}_lr{cfg.optimizer.lr}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    
+
     wandb_logger = WandbLogger(
-        entity=cfg.wandb.entiry,
+        entity=cfg.wandb.entity,
         project=cfg.wandb.project,
         save_dir=cfg.wandb.save_dir,
         offline=cfg.wandb.offline,
@@ -16,7 +16,7 @@ def build_wandb(cfg):
         notes=cfg.wandb.notes,
         tags=cfg.wandb.tags,
         name=name,
-        config=OmegaConf.to_container(cfg, resolve=True, throw_on_missing=True)
+        config=OmegaConf.to_container(cfg, resolve=True, throw_on_missing=True),
     )
 
     # # selected hparams for WandB

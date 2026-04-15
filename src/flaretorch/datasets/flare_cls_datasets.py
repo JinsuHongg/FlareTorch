@@ -203,7 +203,7 @@ class FlareHelioviewerRegDataset(Dataset):
                 return np.log10(target) + 9
 
 
-class FlareSurayBenchDataset(Dataset):
+class FlareSuryaBenchDataset(Dataset):
     """Dataset for solar flare regression/classification using surya-bench data.
 
     Loads sequences of HMI magnetogram images from a Zarr store and pairs them

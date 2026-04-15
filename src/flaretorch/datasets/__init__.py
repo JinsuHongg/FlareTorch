@@ -1,1 +1,5 @@
-from .flare_cls_datasets import FlareHelioviewerRegDataset, FlareSuryaClsDataset
+from .flare_cls_datasets import (
+    FlareHelioviewerRegDataset,
+    FlareSuryaClsDataset,
+    FlareSuryaBenchDataset,
+)

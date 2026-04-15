@@ -7,7 +7,10 @@ from omegaconf import OmegaConf
 import torch
 from lightning.pytorch import Trainer
 
-from flaretorch.datamodules import FlareHelioviewerRegDataModule, FlareSuryaBenchDataModule
+from flaretorch.datamodules import (
+    FlareHelioviewerRegDataModule,
+    FlareSuryaBenchDataModule,
+)
 from flaretorch.models import ResNetMCD, ResNetQR
 from flaretorch.utils import build_wandb, build_callbacks
 
@@ -45,8 +48,8 @@ def build_model(cfg):
 
 
 @hydra.main(
-    config_path="../../../configs",
-    config_name="QR_resnet18_train_surya_bench.yaml",
+    config_path="./configs",
+    config_name="QR_resnet18_train_surya_bench",
     version_base=None,
 )
 def train(cfg):
