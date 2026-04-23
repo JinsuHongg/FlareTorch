@@ -43,6 +43,7 @@ dependencies = [
     "terratorch>=1.1.1",
     "terratorch-surya>=0.1.0",
     "transformers>=4.36.0",
+    "zarr",
 ]
 
 [project.optional-dependencies]
