@@ -11,31 +11,34 @@
 #SBATCH --output=training_%j.out
 #SBATCH --error=training_%j.err
 
-# Determine project root relative to script location
-# Assumes script is at shell_scripts/arctic/training.sh
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-cd "$PROJECT_ROOT"
+# Use SLURM_SUBMIT_DIR to find the project root
+# This is where you were when you ran 'sbatch'
+if [ -n "$SLURM_SUBMIT_DIR" ]; then
+  cd "$SLURM_SUBMIT_DIR"
+else
+  # Fallback for local testing
+  cd "$(dirname "$0")/../.."
+fi
+
+# Verify we are in the project root by checking for scripts/training.py
+if [ ! -f "scripts/training.py" ]; then
+  echo "Error: scripts/training.py not found in $(pwd)"
+  echo "Please submit the job from the project root directory."
+  exit 1
+fi
 
 # Environment activation
-# Using the path from the original script as the primary source
 CONDA_SH="/home/users/jhong36/miniforge3/etc/profile.d/conda.sh"
 
 if [ -f "$CONDA_SH" ]; then
   source "$CONDA_SH"
-elif [ -f "$HOME/miniforge3/etc/profile.d/conda.sh" ]; then
-  source "$HOME/miniforge3/etc/profile.d/conda.sh"
+  conda activate flaretorch
+elif command -v conda >/dev/null 2>&1; then
+  conda activate flaretorch
 else
-  # Try finding conda in the path if sourcing failed
-  if command -v conda >/dev/null 2>&1; then
-    echo "Using system conda"
-  else
-    echo "Error: Conda not found. Please check your conda installation path."
-    exit 1
-  fi
+  echo "Error: Conda not found at $CONDA_SH and 'conda' command not in PATH."
+  exit 1
 fi
-
-conda activate flaretorch
 
 # Verify environment and resources
 echo "Job ID: $SLURM_JOB_ID"
