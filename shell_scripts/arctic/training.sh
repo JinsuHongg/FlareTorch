@@ -4,7 +4,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=8
-#SBATCH --gres=gpu:2
+#SBATCH --gres=gpu:1
 #SBATCH --time=01:00:00
 #SBATCH --mem=64G
 #SBATCH --job-name=uqtraining
@@ -27,6 +27,7 @@ if [ ! -f "scripts/training.py" ]; then
   exit 1
 fi
 
+module load cuda/11.7
 # Environment activation
 CONDA_SH="/home/users/jhong36/miniforge3/etc/profile.d/conda.sh"
 

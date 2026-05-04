@@ -10,12 +10,12 @@ data:
   repo: nasa-ibm-ai4science/surya-bench-flare-forecasting
   ref_mask_img: HMI-Mag.2010.12.06_07.00.00.jpg
   flare_index:
-    path: ../../assets/data/
+    path: ./assets/data/
     train: train.csv
     val: validation.csv
     cal: leaky_validation.csv
     test: test.csv
-  input_index_path: ../../assets/data/helioviewer_mag_input.csv
+  input_index_path: ./assets/data/helioviewer_mag_input.csv
   input:
     path: /anvil/projects/x-cis251356/helioviewer/mag
     ext: jpg
@@ -40,7 +40,7 @@ check_point:
   qr: k55lb3ui_resnet34_qr_q50_epoch=37-val_loss=0.3438.ckpt
 
 uc:
-  csv_path: ../../assets/uc_results/
+  csv_path: ./assets/uc_results/
   significance_level: 0.5
   mcd:
     num_forwards: 100

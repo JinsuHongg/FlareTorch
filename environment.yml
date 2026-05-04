@@ -1,16 +1,11 @@
 name: flaretorch
 channels:
-  - pytorch
-  - nvidia
   - conda-forge
   - defaults
 dependencies:
-  - python>=3.11
+  - python=3.11
   - pip>=21.8
-  - pytorch>=2.0
-  - torchvision>=0.15
-  - torchaudio>=2.0
-  - cuda-toolkit>=12.1
+  - numpy>=2.2
   - curvlinops-for-pytorch>=2.0,<3.0
   - dask>=2025.11.0
   - datasets>=4.4.1
@@ -18,17 +13,12 @@ dependencies:
   - loguru>=0.7.3
   - transformers>=4.36.0
   - pip:
+      - --extra-index-url https://download.pytorch.org/whl/cu124
+      - torch==2.6.0+cu124
+      - torchvision==0.21.0+cu124
+      - torchaudio==2.6.0+cu124
       - torchmetrics>=1.0
       - laplace-torch>=0.2.2.2
       - zarr
       - "terratorch>=1.1.1"
       - "terratorch-surya>=0.1.0"
-
-optional-dependencies:
-  dev:
-    - pip:
-        - pytest>=8.0
-        - pytest-cov>=4.0
-        - ruff>=0.2
-        - mypy>=1.8
-        - pre-commit>=3.0

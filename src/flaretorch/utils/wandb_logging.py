@@ -14,7 +14,7 @@ def build_wandb(cfg):
         log_model=cfg.wandb.log_model,
         save_code=cfg.wandb.save_code,
         notes=cfg.wandb.notes,
-        tags=cfg.wandb.tags,
+        tags=cfg.wandb.tag,
         name=name,
         config=OmegaConf.to_container(cfg, resolve=True, throw_on_missing=True),
     )

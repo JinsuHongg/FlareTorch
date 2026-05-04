@@ -48,7 +48,7 @@ def build_model(cfg):
 
 
 @hydra.main(
-    config_path="./configs",
+    config_path="../configs",
     config_name="QR_resnet18_train_surya_bench",
     version_base=None,
 )
