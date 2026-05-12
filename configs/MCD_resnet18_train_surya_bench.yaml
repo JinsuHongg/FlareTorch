@@ -9,7 +9,7 @@ hydra:
 
 experiment:
   task: regression
-  ckpt_file_name: resnet18_qr
+  ckpt_file_name: resnet18_mcd
 
 data:
   repo: nasa-ibm-ai4science/surya-bench-flare-forecasting
@@ -33,9 +33,9 @@ data:
 model:
   save_ckpt_path: ./assets/checkpoints/qr/
   ckpt: null
-  module_type: qr # mcp, qr
+  module_type: mcd # mcp, qr
   # module specific
-  mcp:
+  mcd:
     num_forwards: 100
   qr:
     quantiles: [0.05, 0.5, 0.95]

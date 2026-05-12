@@ -8,7 +8,6 @@ import torch
 from lightning.pytorch import Trainer
 
 from flaretorch.datamodules import (
-    FlareHelioviewerRegDataModule,
     FlareSuryaBenchDataModule,
 )
 from flaretorch.models import ResNetMCD, ResNetQR
@@ -31,7 +30,7 @@ def build_model(cfg):
         return ResNetMCD(
             model_type=cfg.model.type,
             module_dict=cfg.model.get(cfg.model.module_type),
-            base_model_dict=cfg.model.get(cfg.model.type, "resnet"),
+            base_model_dict=cfg.model.get(cfg.model.type),
             loss_type=cfg.model.loss.type,
             optimizer_dict=cfg.optimizer,
             scheduler_dict=cfg.scheduler,
@@ -41,7 +40,7 @@ def build_model(cfg):
         return ResNetQR(
             model_type=cfg.model.type,
             module_dict=cfg.model.get(cfg.model.module_type),
-            base_model_dict=cfg.model.get(cfg.model.type, "resnet34"),
+            base_model_dict=cfg.model.get(cfg.model.type),
             optimizer_dict=cfg.optimizer,
             scheduler_dict=cfg.scheduler,
         )

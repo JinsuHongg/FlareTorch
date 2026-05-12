@@ -286,18 +286,6 @@ class FlareSuryaBenchDataset(Dataset):
         self._get_valid_indices()
         lgr_logger.info(f"{self.phase} instances: {self.__len__()}")
 
-        # Augmentation for training only
-        if self.phase == "train":
-            self.augment = transforms.Compose(
-                [
-                    transforms.RandomRotation(degrees=11),
-                    transforms.RandomHorizontalFlip(p=0.5),
-                    transforms.RandomVerticalFlip(p=0.5),
-                ]
-            )
-        else:
-            self.augment = None
-
     def get_by_timestamp(self, timestamp: str | pd.Timestamp) -> np.ndarray:
         """Fetch a single HMI image by its exact timestamp.
 

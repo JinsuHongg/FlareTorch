@@ -36,13 +36,15 @@ def create_solar_limb_mask(image_path, threshold_value=10):
     Creates a binary mask for the solar disk from a Helioviewer JPEG/PNG.
     """
     img = cv2.imread(str(image_path), cv2.IMREAD_GRAYSCALE)
-    
+
     if img is None:
         raise ValueError("Could not load image. Check the path.")
 
     _, binary_map = cv2.threshold(img, threshold_value, 255, cv2.THRESH_BINARY)
-    contours, _ = cv2.findContours(binary_map, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    
+    contours, _ = cv2.findContours(
+        binary_map, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+    )
+
     if not contours:
         print("Warning: No contours found. Returning empty mask.")
         return np.zeros_like(img), img, (0, 0), 0
@@ -56,20 +58,22 @@ def create_solar_limb_mask(image_path, threshold_value=10):
     cv2.circle(mask, center, radius, (255), thickness=-1)
     mask = mask // 255
 
-    np.save(Path('../../data/limb_mask.npy'), mask)
+    np.save(Path("../../data/limb_mask.npy"), mask)
     return mask, img, center, radius
 
 
-def build_dask_stack_from_zarr(zarr_path, years=None, threshold_value=10, limb_mask_path=""):
+def build_dask_stack_from_zarr(
+    zarr_path, years=None, threshold_value=10, limb_mask_path=""
+):
     """
     Opens each year group from the zarr store, concatenates hmi_m along timestep,
     and creates a solar limb mask from the first valid image.
-    
+
     Args:
         zarr_path (str | Path): Path to the root zarr store.
         years (list[int] | None): Years to load. Defaults to 2010–2024.
         threshold_value (int): Threshold for solar limb mask creation.
-    
+
     Returns:
         full_stack (da.Array): shape (total_timesteps, 512, 512), dtype float32
         mask (np.ndarray): shape (H, W), values 0 or 1
@@ -88,7 +92,7 @@ def build_dask_stack_from_zarr(zarr_path, years=None, threshold_value=10, limb_m
             continue
 
         lgr_logger.info(f"Opening year: {year}")
-        ds = xr.open_zarr(zarr_path, group=f"{year}/hmi_m", chunks="auto")
+        ds = xr.open_zarr(zarr_path, group=str(year), chunks="auto")
 
         # if "hmi_m" not in ds:
         #     lgr_logger.warning(f"'hmi_m' not found in year {year}, skipping.")
@@ -101,11 +105,17 @@ def build_dask_stack_from_zarr(zarr_path, years=None, threshold_value=10, limb_m
             img_abs = np.abs(first_image)
             img_uint8 = (img_abs / np.nanmax(img_abs) * 255).astype(np.uint8)
 
-            _, binary_map = cv2.threshold(img_uint8, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            _, binary_map = cv2.threshold(
+                img_uint8, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
+            )
 
-            contours, _ = cv2.findContours(binary_map, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            contours, _ = cv2.findContours(
+                binary_map, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+            )
             if not contours:
-                raise RuntimeError("No contours found when creating limb mask. Try adjusting threshold_value.")
+                raise RuntimeError(
+                    "No contours found when creating limb mask. Try adjusting threshold_value."
+                )
 
             solar_disk_contour = max(contours, key=cv2.contourArea)
             (x, y), radius = cv2.minEnclosingCircle(solar_disk_contour)
@@ -137,12 +147,12 @@ def compute_stats(img_array, mask, apply_signumlog=True):
     """
     Compute per-pixel statistics over the full time stack, inside the solar limb mask.
     Optionally applies signumlog transformation before computing statistics.
-    
+
     Args:
         img_array (da.Array): shape (T, H, W), float32
         mask (np.ndarray): shape (H, W), values 0 or 1
         apply_signumlog (bool): If True, applies signumlog transform before stats.
-    
+
     Returns:
         dict with min, max, mean, std, sum, and transform metadata.
     """
@@ -153,7 +163,9 @@ def compute_stats(img_array, mask, apply_signumlog=True):
         img_array = signumlog_transform(img_array)
 
     with ProgressBar():
-        mask_expanded = da.from_array(mask[np.newaxis, :, :], chunks=(1, mask.shape[0], mask.shape[1]))
+        mask_expanded = da.from_array(
+            mask[np.newaxis, :, :], chunks=(1, mask.shape[0], mask.shape[1])
+        )
         masked = da.where(mask_expanded == 1, img_array, np.nan)
 
         min_val, max_val, mean_val, std_val, sum_val = da.compute(
@@ -165,11 +177,11 @@ def compute_stats(img_array, mask, apply_signumlog=True):
         )
 
     return {
-        "min":       float(min_val),
-        "max":       float(max_val),
-        "mean":      float(mean_val),
-        "std":       float(std_val),
-        "sum":       float(sum_val),
+        "min": float(min_val),
+        "max": float(max_val),
+        "mean": float(mean_val),
+        "std": float(std_val),
+        "sum": float(sum_val),
         "transform": "signumlog" if apply_signumlog else "none",
     }
 
@@ -188,7 +200,7 @@ def main(cfg):
         lgr_logger.info(f"Statistics found at: {stat_path}")
     else:
         img_array, mask = build_dask_stack_from_zarr(
-            zarr_path=Path(cfg.data.zarr_path),
+            zarr_path=Path(cfg.data.input_zarr_path),
             years=list(range(2010, 2025)),
             limb_mask_path=cfg.data.limb_mask_path,
         )

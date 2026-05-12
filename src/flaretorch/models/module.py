@@ -140,7 +140,7 @@ class ResNetMCD(BaseModule):
         # Standard training loop
         x, y, timestamps = batch
         y_hat = self(x)
-        loss = self.loss_fn(y_hat.squeeze(), y)
+        loss = self.loss_fn(y_hat.view(-1), y)
         self.train_r2(y_hat, y)
         self.log("train_loss", loss, prog_bar=True, sync_dist=True)
         self.log("train_r2", self.train_r2, on_step=False, on_epoch=True, prog_bar=True)
@@ -153,9 +153,9 @@ class ResNetMCD(BaseModule):
             batch: The input batch.
             batch_idx: Index of the batch.
         """
-        x, y, timestamps = batch
+        x, y, _ = batch
         y_hat = self(x)
-        loss = self.loss_fn(y_hat.squeeze(), y)
+        loss = self.loss_fn(y_hat.view(-1), y)
         self.val_r2(y_hat, y)
         self.log("val_loss", loss, prog_bar=True, sync_dist=True)
         self.log("val_r2", self.val_r2, on_step=False, on_epoch=True, prog_bar=True)
