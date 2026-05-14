@@ -7,6 +7,9 @@ from .backbone import (
     ResNet50Regressor,
     AlexNetRegressor,
     MobileNetRegressor,
+    ResNet18Cls,
+    ResNet34Cls,
+    ResNet50Cls,
 )
 from .base import BaseModule
 from ..utils.losses import PinballLoss
@@ -292,3 +295,98 @@ class ResNetQR(BaseModule):
 
         # Dynamic return based on your config
         return {str(q): preds[:, i] for i, q in enumerate(self.quantiles)}
+
+
+from ..metrics.classification_metrics import MultiClassClassificationMetrics
+
+class ResNetCls(BaseModule):
+    """ResNet for classification."""
+
+    def __init__(
+        self,
+        model_type,
+        base_model_dict,
+        optimizer_dict,
+        scheduler_dict,
+        loss_dict=None,
+    ):
+        super().__init__(optimizer_dict=optimizer_dict, scheduler_dict=scheduler_dict)
+        self.save_hyperparameters()
+        
+        if loss_dict and "class_weights" in loss_dict:
+            weights = torch.tensor(loss_dict["class_weights"], dtype=torch.float)
+            self.register_buffer("class_weights", weights)
+            self.loss_fn = nn.CrossEntropyLoss(weight=weights)
+        else:
+            self.loss_fn = nn.CrossEntropyLoss()
+        
+        self.val_metrics = MultiClassClassificationMetrics(num_classes=base_model_dict.num_classes)
+        self.train_metrics = MultiClassClassificationMetrics(num_classes=base_model_dict.num_classes)
+        self.test_metrics = MultiClassClassificationMetrics(num_classes=base_model_dict.num_classes)
+
+        match model_type:
+            case "resnet18":
+                self.base_model = ResNet18Cls(
+                    in_channels=base_model_dict.in_channels,
+                    time_steps=base_model_dict.time_steps,
+                    num_classes=base_model_dict.num_classes,
+                    dropout=base_model_dict.p_drop,
+                )
+            case "resnet34":
+                self.base_model = ResNet34Cls(
+                    in_channels=base_model_dict.in_channels,
+                    time_steps=base_model_dict.time_steps,
+                    num_classes=base_model_dict.num_classes,
+                    dropout=base_model_dict.p_drop,
+                )
+            case "resnet50":
+                self.base_model = ResNet50Cls(
+                    in_channels=base_model_dict.in_channels,
+                    time_steps=base_model_dict.time_steps,
+                    num_classes=base_model_dict.num_classes,
+                    dropout=base_model_dict.p_drop,
+                )
+
+    def forward(self, x):
+        return self.base_model(x)
+
+    def training_step(self, batch, batch_idx):
+        x, y, _ = batch
+        logits = self(x)
+        loss = self.loss_fn(logits, y)
+        self.train_metrics.update(logits, y)
+        self.log("train_loss", loss, prog_bar=True, sync_dist=True, on_step=True, on_epoch=True)
+        return loss
+
+    def on_train_epoch_end(self):
+        metrics = self.train_metrics.compute()
+        self.log_dict({f"train_{k}": v for k, v in metrics.items()}, prog_bar=True, sync_dist=True)
+        self.train_metrics.reset()
+
+    def validation_step(self, batch, batch_idx):
+        x, y, _ = batch
+        logits = self(x)
+        loss = self.loss_fn(logits, y)
+        self.val_metrics.update(logits, y)
+        self.log("val_loss", loss, prog_bar=True, sync_dist=True, on_step=False, on_epoch=True)
+        return loss
+
+    def on_validation_epoch_end(self):
+        metrics = self.val_metrics.compute()
+        self.log_dict({f"val_{k}": v for k, v in metrics.items()}, prog_bar=True, sync_dist=True)
+        self.val_metrics.reset()
+
+    def test_step(self, batch, batch_idx):
+        x, y, _ = batch
+        logits = self(x)
+        loss = self.loss_fn(logits, y)
+        self.test_metrics.update(logits, y)
+        self.log("test_loss", loss, prog_bar=True, sync_dist=True, on_step=False, on_epoch=True)
+        return loss
+
+    def on_test_epoch_end(self):
+        metrics = self.test_metrics.compute()
+        self.log_dict({f"test_{k}": v for k, v in metrics.items()}, prog_bar=True, sync_dist=True)
+        self.test_metrics.reset()
+
+

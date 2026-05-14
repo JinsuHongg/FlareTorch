@@ -10,7 +10,7 @@ from lightning.pytorch import Trainer
 from flaretorch.datamodules import (
     FlareSuryaBenchDataModule,
 )
-from flaretorch.models import ResNetMCD, ResNetQR
+from flaretorch.models import ResNetMCD, ResNetQR, ResNetCls
 from flaretorch.utils import build_wandb, build_callbacks
 
 torch.set_float32_matmul_precision("medium")
@@ -43,6 +43,15 @@ def build_model(cfg):
             base_model_dict=cfg.model.get(cfg.model.type),
             optimizer_dict=cfg.optimizer,
             scheduler_dict=cfg.scheduler,
+        )
+
+    elif module_type == "cls":
+        return ResNetCls(
+            model_type=cfg.model.type,
+            base_model_dict=cfg.model.get(cfg.model.type),
+            optimizer_dict=cfg.optimizer,
+            scheduler_dict=cfg.scheduler,
+            loss_dict=cfg.model.get("loss"),
         )
 
 

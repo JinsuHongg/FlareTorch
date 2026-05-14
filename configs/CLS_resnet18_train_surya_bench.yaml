@@ -8,8 +8,8 @@ hydra:
     dir: .
 
 experiment:
-  task: regression
-  ckpt_file_name: resnet18_mcd
+  task: classification
+  ckpt_file_name: resnet18_cls
 
 data:
   repo: nasa-ibm-ai4science/surya-bench-flare-forecasting
@@ -20,35 +20,32 @@ data:
     val: validation.csv
     test: test.csv
   input_zarr_path: /scratch/users/jhong36/data/sdo_512.zarr
-  input_time_delta: [0] #[-60, 0]
+  input_time_delta: [0]
   input_stat_path: ./assets/stats/los_mag_stat.yaml
-  label_type: max_intensity
+  label_type: max_goes_class
   limb_mask_path: ./assets/limb_mask.npy
-  target_norm_type: log
+  target_norm_type: multi_class
   # for dataloader
   num_workers: 6
   batch_size: 256
   pin_memory: true
 
 model:
-  save_ckpt_path: ./assets/checkpoints/qr/
+  save_ckpt_path: ./assets/checkpoints/cls/
   ckpt: null
-  module_type: mcd # mcp, qr
-  # module specific
-  mcd:
-    num_forwards: 100
-  qr:
-    quantiles: [0.05, 0.5, 0.95]
+  module_type: cls # mcp, qr, cls
   
   # base model
   type: resnet18
   resnet18:
     in_channels: 1
     time_steps: 1
+    num_classes: 5
     p_drop: 0.5
     
   loss:
-    type: mse
+    type: cross_entropy
+    class_weights: [1.0, 1.0, 1.0, 1.0, 1.0]
 
 optimizer:
   type: adamw
@@ -56,12 +53,11 @@ optimizer:
   weight_decay: 0.01
 
 scheduler:
-    use: cosine_warmup # The switch
+    use: cosine_warmup
     monitor: val_loss 
-    # Define available strategies
     cosine_warmup:
       total_steps: 1000
-      warmup_ratio: 0.1 # Default 10% warmup
+      warmup_ratio: 0.1
     plateau:
       mode: min
       factor: 0.1
@@ -81,9 +77,9 @@ trainer:
 wandb:
   save_dir: ./assets
   entity: gsu-dmlab
-  project: uncertainty-flare-regression
+  project: uncertainty-flare-classification
   log_model: false
-  notes: Resnet18 backbone and QR
+  notes: Resnet18 backbone and Classification
   offline: false
   save_code: false
-  tag: ["resnet18", "qr", "reg"] # backbone model, head type, task
+  tag: ["resnet18", "cls"] # backbone model, head type, task

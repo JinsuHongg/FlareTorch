@@ -74,8 +74,8 @@ trainer:
   max_epochs: 300
   precision: 32
   log_every_n_steps: 50
-  limit_train_batches: 3000
-  limit_val_batches: 1500
+  limit_train_batches: null
+  limit_val_batches: null
   strategy: auto
 
 wandb:

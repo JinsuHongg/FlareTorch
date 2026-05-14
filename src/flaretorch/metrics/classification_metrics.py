@@ -1,111 +1,70 @@
 import torch
 import torch.nn as nn
+from torchmetrics import Metric
 
 
-class DistributedClassificationMetrics(nn.Module):
-    """Distributed classification metrics for binary classification.
-
-    This class tracks true positives, true negatives, false positives, and
-    false negatives to compute various classification metrics like accuracy,
-    precision, recall, F1 score, TSS, and HSS.
+class MultiClassClassificationMetrics(Metric):
+    """Multi-class classification metrics including Skill Scores.
 
     Args:
-        threshold: Threshold for converting probabilities to binary predictions.
-
-    Attributes:
-        threshold: Threshold for binary classification.
-        _counts: Buffer storing counts of TP, TN, FP, and FN.
+        num_classes: Number of classes.
     """
 
-    def __init__(self, threshold: float = 0.5):
+    def __init__(self, num_classes: int):
         super().__init__()
-        self.threshold = threshold
-        self.register_buffer("_counts", torch.zeros(4))  # tp, tn, fp, fn
+        self.num_classes = num_classes
+        self.add_state(
+            "conf_matrix",
+            default=torch.zeros(num_classes, num_classes, dtype=torch.long),
+            dist_reduce_fx="sum",
+        )
 
-    @property
-    def tp(self):
-        """Returns the count of true positives.
+    def update(self, preds: torch.Tensor, target: torch.Tensor):
+        """Update confusion matrix."""
+        preds = torch.argmax(preds, dim=1)
+        # Assuming target is not one-hot encoded
+        cm = torch.zeros(self.num_classes, self.num_classes, dtype=torch.long, device=preds.device)
+        for p, t in zip(preds, target):
+            cm[t, p] += 1
+        self.conf_matrix += cm
 
-        Returns:
-            True positive count.
-        """
-        return self._counts[0]
+    def compute(self):
+        """Compute all metrics."""
+        cm = self.conf_matrix
+        tp = cm.diag()
+        row_sum = cm.sum(dim=1)
+        col_sum = cm.sum(dim=0)
+        n = cm.sum()
 
-    @property
-    def tn(self):
-        """Returns the count of true negatives.
+        # Standard metrics
+        accuracy = tp.sum() / n
+        
+        # Balanced accuracy
+        balanced_accuracy = (tp / row_sum).mean()
 
-        Returns:
-            True negative count.
-        """
-        return self._counts[1]
+        # Macro metrics
+        precision = (tp / (col_sum + 1e-12)).mean()
+        recall = (tp / (row_sum + 1e-12)).mean()
+        f1 = 2 * (precision * recall) / (precision + recall + 1e-12)
 
-    @property
-    def fp(self):
-        """Returns the count of false positives.
+        # Skill Scores
+        # TSS = (sum(tp) - sum(row_i * col_i)/n) / (n - sum(row_i^2)/n)
+        # HSS = (n * sum(tp) - sum(row_i * col_i)) / (n^2 - sum(row_i * col_i))
+        
+        sum_tp = tp.sum()
+        sum_product_marginals = (row_sum * col_sum).sum()
+        sum_row_sq = (row_sum**2).sum()
+        
+        hss = (n * sum_tp - sum_product_marginals) / (n**2 - sum_product_marginals + 1e-12)
+        tss = (n * sum_tp - sum_product_marginals) / (n**2 - sum_row_sq + 1e-12)
 
-        Returns:
-            False positive count.
-        """
-        return self._counts[2]
-
-    @property
-    def fn(self):
-        """Returns the count of false negatives.
-
-        Returns:
-            False negative count.
-        """
-        return self._counts[3]
-
-    def update(self, prediction, target):
-        """Updates the counts based on new predictions and targets.
-
-        Args:
-            prediction: Predicted probabilities or binary values.
-            target: Ground truth binary labels.
-        """
-        prediction = (prediction > self.threshold).int()
-        target = target.int()
-
-        self._counts[0] += ((prediction == 1) & (target == 1)).sum()
-        self._counts[1] += ((prediction == 0) & (target == 0)).sum()
-        self._counts[2] += ((prediction == 1) & (target == 0)).sum()
-        self._counts[3] += ((prediction == 0) & (target == 1)).sum()
-
-    def compute_and_reset(self):
-        """Computes metrics and resets the counts.
-
-        Returns:
-            A dictionary containing TP, TN, FP, FN, accuracy, precision,
-            recall, F1, TSS, and HSS.
-        """
-        result = {
-            "tp": self.tp,
-            "tn": self.tn,
-            "fp": self.fp,
-            "fn": self.fn,
+        return {
+            "accuracy": accuracy,
+            "balanced_accuracy": balanced_accuracy,
+            "precision_macro": precision,
+            "recall_macro": recall,
+            "f1_macro": f1,
+            "tss": tss,
+            "hss": hss,
         }
-        result["accuracy"] = (self.tp + self.tn) / (
-            self.tp + self.tn + self.fp + self.fn
-        )
-        result["precision"] = self.tp / (self.tp + self.fp)
-        result["recall"] = self.tp / (self.tp + self.fn)
-        result["f1"] = 2 * self.tp / (2 * self.tp + self.fp + self.fn)
-        result["tss"] = self.tp / (self.tp + self.fn) - self.fp / (self.fp + self.tn)
 
-        n = self.tn + self.fp
-        p = self.tp + self.fn
-        result["hss"] = (
-            2.0
-            * (self.tp * self.tn - self.fn * self.fp)
-            / (p * (self.fn + self.tn) + (self.tp + self.fp) * n)
-        )
-
-        self.reset()
-
-        return result
-
-    def reset(self):
-        """Resets the counts to zero."""
-        self._counts.zero_()

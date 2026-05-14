@@ -305,30 +305,111 @@ class MobileNetRegressor(nn.Module):
         self.dropout = nn.Dropout(dropout)
         self.regressor = nn.Linear(1280, num_classes)
 
+
+class ResNet18Cls(nn.Module):
+    """ResNet18-based classifier for image sequences.
+
+    Args:
+        in_channels: Number of input channels per time step.
+        time_steps: Number of time steps in the input sequence.
+        num_classes: Number of output classes.
+        dropout: Dropout probability.
+
+    Attributes:
+        resnet: Modified ResNet18 backbone.
+        dropout: Dropout layer.
+        classifier: Final classification layer.
+    """
+
+    def __init__(self, in_channels=3, time_steps=1, num_classes=5, dropout=0.1):
+        super(ResNet18Cls, self).__init__()
+        self.resnet = models.resnet18(weights=None)
+        merged_channels = in_channels * time_steps
+        self.resnet.conv1 = nn.Conv2d(
+            merged_channels, 64, kernel_size=7, stride=2, padding=3, bias=False
+        )
+        self.resnet = nn.Sequential(*list(self.resnet.children())[:-1])
+        self.dropout = nn.Dropout(dropout)
+        self.classifier = nn.Linear(512, num_classes)
+
     def forward(self, x):
-        """Forward pass of the model.
-
-        Args:
-            x: Input tensor of shape (B, C, T, H, W).
-
-        Returns:
-            Output tensor of shape (B, num_classes) or (B,).
-        """
-        # Input: B, C, T, H, W
         B, C, T, H, W = x.shape
-
-        # Merge T and C channels: B, C*T, H, W
-        x_merged = x.permute(0, 2, 1, 3, 4).contiguous()  # B, T, C, H, W
-        x_merged = x_merged.view(B, C * T, H, W)  # B, C*T, H, W
-
-        # Pass through MobileNet
-        features = self.mobilenet(x_merged)  # B, 1280, H', W'
-
-        # Global average pooling
-        features = torch.mean(features, dim=[2, 3])  # B, 1280
-
-        # Classification
+        x_merged = x.permute(0, 2, 1, 3, 4).contiguous()
+        x_merged = x_merged.view(B, C * T, H, W)
+        features = self.resnet(x_merged)
+        features = torch.mean(features, dim=[2, 3])
         features = self.dropout(features)
-        output = self.regressor(features)
+        return self.classifier(features)
 
-        return output.squeeze(-1)
+
+class ResNet34Cls(nn.Module):
+    """ResNet34-based classifier for image sequences.
+
+    Args:
+        in_channels: Number of input channels per time step.
+        time_steps: Number of time steps in the input sequence.
+        num_classes: Number of output classes.
+        dropout: Dropout probability.
+
+    Attributes:
+        resnet: Modified ResNet34 backbone.
+        dropout: Dropout layer.
+        classifier: Final classification layer.
+    """
+
+    def __init__(self, in_channels=3, time_steps=1, num_classes=5, dropout=0.1):
+        super(ResNet34Cls, self).__init__()
+        self.resnet = models.resnet34(weights=None)
+        merged_channels = in_channels * time_steps
+        self.resnet.conv1 = nn.Conv2d(
+            merged_channels, 64, kernel_size=7, stride=2, padding=3, bias=False
+        )
+        self.resnet = nn.Sequential(*list(self.resnet.children())[:-1])
+        self.dropout = nn.Dropout(dropout)
+        self.classifier = nn.Linear(512, num_classes)
+
+    def forward(self, x):
+        B, C, T, H, W = x.shape
+        x_merged = x.permute(0, 2, 1, 3, 4).contiguous()
+        x_merged = x_merged.view(B, C * T, H, W)
+        features = self.resnet(x_merged)
+        features = torch.mean(features, dim=[2, 3])
+        features = self.dropout(features)
+        return self.classifier(features)
+
+
+class ResNet50Cls(nn.Module):
+    """ResNet50-based classifier for image sequences.
+
+    Args:
+        in_channels: Number of input channels per time step.
+        time_steps: Number of time steps in the input sequence.
+        num_classes: Number of output classes.
+        dropout: Dropout probability.
+
+    Attributes:
+        resnet: Modified ResNet50 backbone.
+        dropout: Dropout layer.
+        classifier: Final classification layer.
+    """
+
+    def __init__(self, in_channels=3, time_steps=1, num_classes=5, dropout=0.1):
+        super(ResNet50Cls, self).__init__()
+        self.resnet = models.resnet50(weights=None)
+        merged_channels = in_channels * time_steps
+        self.resnet.conv1 = nn.Conv2d(
+            merged_channels, 64, kernel_size=7, stride=2, padding=3, bias=False
+        )
+        self.resnet = nn.Sequential(*list(self.resnet.children())[:-1])
+        self.dropout = nn.Dropout(dropout)
+        self.classifier = nn.Linear(2048, num_classes)
+
+    def forward(self, x):
+        B, C, T, H, W = x.shape
+        x_merged = x.permute(0, 2, 1, 3, 4).contiguous()
+        x_merged = x_merged.view(B, C * T, H, W)
+        features = self.resnet(x_merged)
+        features = torch.mean(features, dim=[2, 3])
+        features = self.dropout(features)
+        return self.classifier(features)
+

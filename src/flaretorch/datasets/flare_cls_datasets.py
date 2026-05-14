@@ -222,8 +222,9 @@ class FlareSuryaBenchDataset(Dataset):
         scaler_div: Divisive scaler applied during preprocessing.
         label_type: Column name in flare_index for the target label.
         target_norm_type: Normalization strategy for the target label.
-            'log'    — log10(target) + 9, returns float.
-            'binary' — casts existing 0/1 column to int, returns long.
+            'log'        — log10(target) + 9, returns float.
+            'binary'     — casts existing 0/1 column to int, returns long.
+            'multi_class'— maps GOES class strings to 0-4 int, returns long.
         phase: Dataset phase, one of 'train', 'val', or 'test'.
             Training phase applies random augmentations.
 
@@ -342,7 +343,7 @@ class FlareSuryaBenchDataset(Dataset):
         raw_target = self.flare_index.loc[current_time, self.label_type]
         target = self.transform_target(raw_target)
 
-        dtype = torch.long if self.target_norm_type == "binary" else torch.float32
+        dtype = torch.long if self.target_norm_type in ["binary", "multi_class"] else torch.float32
         return x, torch.tensor(target, dtype=dtype), current_time.value
 
     def _get_valid_indices(self) -> None:
@@ -381,18 +382,19 @@ class FlareSuryaBenchDataset(Dataset):
         arr_normalized = (arr_transformed - self.stats.mean) / self.stats.std
         return torch.from_numpy(arr_normalized).unsqueeze(0)
 
-    def transform_target(self, target: float) -> float | int:
+    def transform_target(self, target: float | str) -> float | int:
         """Applies normalization to the target label.
 
         Args:
             target: Raw target value from flare_index.
 
         Returns:
-            For 'log'    — float: log10(target) + 9.
-            For 'binary' — int: 0 or 1 (cast from existing binary column).
+            For 'log'         — float: log10(target) + 9.
+            For 'binary'      — int: 0 or 1 (cast from existing binary column).
+            For 'multi_class' — int: 0-4 (maps GOES class).
 
         Raises:
-            ValueError: If target_norm_type is not 'log' or 'binary'.
+            ValueError: If target_norm_type is not 'log', 'binary', or 'multi_class'.
             ValueError: If target_norm_type is 'log' and target is zero.
         """
         match self.target_norm_type:
@@ -407,10 +409,17 @@ class FlareSuryaBenchDataset(Dataset):
             case "binary":
                 return int(target)
 
+            case "multi_class":
+                if pd.isna(target) or target == "FQ":
+                    return 0
+                target_str = str(target).upper()
+                mapping = {"A": 0, "B": 1, "C": 2, "M": 3, "X": 4}
+                return mapping.get(target_str[0], 0)
+
             case _:
                 raise ValueError(
                     f"Unknown target_norm_type: '{self.target_norm_type}'. "
-                    f"Expected 'log' or 'binary'."
+                    f"Expected 'log', 'binary', or 'multi_class'."
                 )
 
 
