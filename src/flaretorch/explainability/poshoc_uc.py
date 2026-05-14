@@ -4,6 +4,7 @@ from laplace import Laplace
 import lightning as L
 import numpy as np
 from loguru import logger as lgr_logger
+from ..metrics.classification_metrics import ClassificationUQMetrics
 
 
 class CPWrapper(L.LightningModule):
@@ -429,3 +430,348 @@ class LaplaceWrapper(L.LightningModule):
             # "upper": f_mean + z_score * total_std,
             # "zscore": z_score,
         }
+
+
+class ClsCPWrapper(L.LightningModule):
+    """Conformal Prediction wrapper for Classification (LAC).
+
+    This wrapper applies the Least Ambiguous Coverage (LAC) method to provide
+    valid prediction sets with specified coverage.
+
+    Args:
+        trained_model: The pre-trained LightningModule for classification.
+        alpha: Error rate (e.g., 0.05 for 95% coverage).
+
+    Attributes:
+        base_model: The underlying pre-trained model.
+        alpha: The specified error rate.
+        q_hat: The calculated quantile for prediction sets.
+    """
+
+    def __init__(self, trained_model: L.LightningModule, num_classes: int = 5, alpha: float = 0.05):
+        super().__init__()
+        self.base_model = trained_model
+        self.alpha = alpha
+        self.register_buffer("q_hat", torch.tensor(1.0))
+        self.test_uq_metrics = ClassificationUQMetrics(num_classes=num_classes)
+
+    def forward(self, x):
+        """Forward pass using the base model.
+
+        Args:
+            x: Input tensor.
+
+        Returns:
+            Model logits.
+        """
+        return self.base_model(x)
+
+    def calibrate(self, dataloader):
+        """Runs calibration to find the scalar 'q_hat'.
+
+        Args:
+            dataloader: DataLoader for the calibration set.
+        """
+        lgr_logger.info("Starting Classification CP (LAC) Calibration...")
+        self.base_model.eval()
+        scores = []
+        device = self.device
+        with torch.no_grad():
+            for batch in dataloader:
+                x, y, _ = batch
+                x, y = x.to(device), y.to(device)
+                logits = self.base_model(x)
+                probs = torch.softmax(logits, dim=1)
+                # LAC score: 1 - prob of true class
+                true_probs = probs[torch.arange(len(y)), y]
+                score = 1.0 - true_probs
+                scores.append(score)
+        scores = torch.cat(scores)
+        n = len(scores)
+        q_level = np.ceil((n + 1) * (1 - self.alpha)) / n
+        q_level = min(1.0, max(0.0, q_level))
+        self.q_hat = torch.quantile(scores, q_level)
+        lgr_logger.info(
+            f"Classification CP (LAC) Calibration Complete. Q_hat = {self.q_hat.item():.4f}"
+        )
+
+    def predict_step(self, batch, batch_idx):
+        """Returns the Conformal Prediction Set.
+
+        Args:
+            batch: The input batch.
+            batch_idx: Index of the batch.
+
+        Returns:
+            A dictionary containing 'probs', 'prediction_set', 'y_hat', and 'target'.
+        """
+        x, y, _ = batch
+        logits = self.base_model(x)
+        probs = torch.softmax(logits, dim=1)
+        # Prediction set: {y : probs[y] >= 1 - q_hat}
+        prediction_sets = probs >= (1.0 - self.q_hat)
+        return {
+            "probs": probs,
+            "prediction_set": prediction_sets,
+            "y_hat": torch.argmax(probs, dim=1),
+            "target": y,
+        }
+
+    def test_step(self, batch, batch_idx):
+        x, y, _ = batch
+        out = self.predict_step(batch, batch_idx)
+        self.test_uq_metrics.update(out["prediction_set"], y)
+        return out
+
+    def on_test_epoch_end(self):
+        results = self.test_uq_metrics.compute()
+        self.log_dict({f"test_{k}": v for k, v in results.items()}, prog_bar=True)
+        self.test_uq_metrics.reset()
+
+
+class APSWrapper(L.LightningModule):
+    """Adaptive Prediction Sets (APS) for Classification.
+
+    Implements the standard APS method (Romano et al. 2020) which produces
+    adaptive prediction sets by sorting class probabilities.
+
+    Args:
+        trained_model: The pre-trained LightningModule for classification.
+        alpha: Error rate (e.g., 0.05 for 95% coverage).
+
+    Attributes:
+        base_model: The underlying pre-trained model.
+        alpha: The specified error rate.
+        q_hat: The calculated quantile for prediction sets.
+    """
+
+    def __init__(self, trained_model: L.LightningModule, num_classes: int = 5, alpha: float = 0.05):
+        super().__init__()
+        self.base_model = trained_model
+        self.alpha = alpha
+        self.register_buffer("q_hat", torch.tensor(1.0))
+        self.test_uq_metrics = ClassificationUQMetrics(num_classes=num_classes)
+
+    def forward(self, x):
+        """Forward pass using the base model.
+
+        Args:
+            x: Input tensor.
+
+        Returns:
+            Model logits.
+        """
+        return self.base_model(x)
+
+    def _compute_scores(self, probs, y=None):
+        # Sort probabilities in descending order
+        sorted_probs, sorted_indices = torch.sort(probs, dim=1, descending=True)
+        # Cumulative sums
+        cum_probs = torch.cumsum(sorted_probs, dim=1)
+
+        if y is not None:
+            # Find rank of true class y
+            # We want the index j such that sorted_indices[i, j] == y[i]
+            ranks = (sorted_indices == y.unsqueeze(1)).nonzero()[:, 1]
+            # Score is the cumulative sum up to the true class
+            scores = cum_probs[torch.arange(len(y)), ranks]
+            return scores
+        else:
+            return cum_probs, sorted_indices
+
+    def calibrate(self, dataloader):
+        """Runs calibration to find the scalar 'q_hat'.
+
+        Args:
+            dataloader: DataLoader for the calibration set.
+        """
+        lgr_logger.info("Starting APS Calibration...")
+        self.base_model.eval()
+        scores = []
+        device = self.device
+        with torch.no_grad():
+            for batch in dataloader:
+                x, y, _ = batch
+                x, y = x.to(device), y.to(device)
+                logits = self.base_model(x)
+                probs = torch.softmax(logits, dim=1)
+                score = self._compute_scores(probs, y)
+                scores.append(score)
+        scores = torch.cat(scores)
+        n = len(scores)
+        q_level = np.ceil((n + 1) * (1 - self.alpha)) / n
+        q_level = min(1.0, max(0.0, q_level))
+        self.q_hat = torch.quantile(scores, q_level)
+        lgr_logger.info(f"APS Calibration Complete. Q_hat = {self.q_hat.item():.4f}")
+
+    def predict_step(self, batch, batch_idx):
+        """Returns the Adaptive Prediction Set.
+
+        Args:
+            batch: The input batch.
+            batch_idx: Index of the batch.
+
+        Returns:
+            A dictionary containing 'probs', 'prediction_set', 'y_hat', and 'target'.
+        """
+        x, y, _ = batch
+        logits = self.base_model(x)
+        probs = torch.softmax(logits, dim=1)
+        cum_probs, sorted_indices = self._compute_scores(probs)
+
+        batch_size, K = probs.shape
+        prediction_sets = torch.zeros(batch_size, K, dtype=torch.bool, device=probs.device)
+
+        for i in range(batch_size):
+            mask = cum_probs[i] <= self.q_hat
+            classes = sorted_indices[i, mask]
+            # Ensure at least the top class is included if q_hat is very small
+            if len(classes) == 0:
+                classes = sorted_indices[i, :1]
+            prediction_sets[i, classes] = True
+
+        return {
+            "probs": probs,
+            "prediction_set": prediction_sets,
+            "y_hat": torch.argmax(probs, dim=1),
+            "target": y,
+        }
+
+    def test_step(self, batch, batch_idx):
+        x, y, _ = batch
+        out = self.predict_step(batch, batch_idx)
+        self.test_uq_metrics.update(out["prediction_set"], y)
+        return out
+
+    def on_test_epoch_end(self):
+        results = self.test_uq_metrics.compute()
+        self.log_dict({f"test_{k}": v for k, v in results.items()}, prog_bar=True)
+        self.test_uq_metrics.reset()
+
+
+class OrdinalAPSWrapper(L.LightningModule):
+    """Ordinal Adaptive Prediction Sets (OAPS) for Ordinal Classification.
+
+    Implements the OAPS method for labels with a natural ordering (Tiberi et al. 2023).
+    This ensures that prediction sets are intervals in the ordinal space.
+
+    Args:
+        trained_model: The pre-trained LightningModule for classification.
+        alpha: Error rate (e.g., 0.05 for 95% coverage).
+
+    Attributes:
+        base_model: The underlying pre-trained model.
+        alpha: The specified error rate.
+        q_hat: The calculated quantile for prediction sets.
+    """
+
+    def __init__(self, trained_model: L.LightningModule, num_classes: int = 5, alpha: float = 0.05):
+        super().__init__()
+        self.base_model = trained_model
+        self.alpha = alpha
+        self.register_buffer("q_hat", torch.tensor(1.0))
+        self.test_uq_metrics = ClassificationUQMetrics(num_classes=num_classes)
+
+    def forward(self, x):
+        """Forward pass using the base model.
+
+        Args:
+            x: Input tensor.
+
+        Returns:
+            Model logits.
+        """
+        return self.base_model(x)
+
+    def _get_all_intervals_max_probs(self, probs):
+        B, K = probs.shape
+        cumprobs = torch.cumsum(probs, dim=1)
+        cumprobs = torch.cat([torch.zeros(B, 1, device=probs.device), cumprobs], dim=1)
+
+        P = torch.zeros(B, K, device=probs.device)
+        I_start = torch.zeros(B, K, dtype=torch.long, device=probs.device)
+
+        for s in range(1, K + 1):
+            s_probs = cumprobs[:, s:] - cumprobs[:, :-s]
+            max_p, start_idx = torch.max(s_probs, dim=1)
+            P[:, s-1] = max_p
+            I_start[:, s-1] = start_idx
+        return P, I_start
+
+    def _compute_score(self, probs, y):
+        P, I_start = self._get_all_intervals_max_probs(probs)
+        B, K = probs.shape
+        scores = torch.full((B,), 1.5, device=probs.device)
+        for s in range(1, K + 1):
+            start = I_start[:, s-1]
+            end = start + s - 1
+            mask = (y >= start) & (y <= end)
+            scores = torch.where(mask & (P[:, s-1] < scores), P[:, s-1], scores)
+        return scores
+
+    def calibrate(self, dataloader):
+        """Runs calibration to find the scalar 'q_hat'.
+
+        Args:
+            dataloader: DataLoader for the calibration set.
+        """
+        lgr_logger.info("Starting Ordinal APS Calibration...")
+        self.base_model.eval()
+        all_scores = []
+        device = self.device
+        with torch.no_grad():
+            for batch in dataloader:
+                x, y, _ = batch
+                x, y = x.to(device), y.to(device)
+                logits = self.base_model(x)
+                probs = torch.softmax(logits, dim=1)
+                scores = self._compute_score(probs, y)
+                all_scores.append(scores)
+        all_scores = torch.cat(all_scores)
+        n = len(all_scores)
+        q_level = np.ceil((n + 1) * (1 - self.alpha)) / n
+        q_level = min(1.0, max(0.0, q_level))
+        self.q_hat = torch.quantile(all_scores, q_level)
+        lgr_logger.info(f"Ordinal APS Calibration Complete. Q_hat = {self.q_hat.item():.4f}")
+
+    def predict_step(self, batch, batch_idx):
+        """Returns the Ordinal Adaptive Prediction Set.
+
+        Args:
+            batch: The input batch.
+            batch_idx: Index of the batch.
+
+        Returns:
+            A dictionary containing 'probs', 'prediction_set', 'y_hat', and 'target'.
+        """
+        x, y, _ = batch
+        logits = self.base_model(x)
+        probs = torch.softmax(logits, dim=1)
+        P, I_start = self._get_all_intervals_max_probs(probs)
+
+        B, K = probs.shape
+        prediction_sets = torch.zeros(B, K, dtype=torch.bool, device=probs.device)
+        for s in range(1, K + 1):
+            mask = P[:, s-1] <= self.q_hat
+            for i in range(B):
+                if mask[i]:
+                    start = I_start[i, s-1]
+                    prediction_sets[i, start : start + s] = True
+
+        return {
+            "probs": probs,
+            "prediction_set": prediction_sets,
+            "y_hat": torch.argmax(probs, dim=1),
+            "target": y,
+        }
+
+    def test_step(self, batch, batch_idx):
+        x, y, _ = batch
+        out = self.predict_step(batch, batch_idx)
+        self.test_uq_metrics.update(out["prediction_set"], y)
+        return out
+
+    def on_test_epoch_end(self):
+        results = self.test_uq_metrics.compute()
+        self.log_dict({f"test_{k}": v for k, v in results.items()}, prog_bar=True)
+        self.test_uq_metrics.reset()

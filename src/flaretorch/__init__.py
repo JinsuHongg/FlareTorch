@@ -1,6 +1,6 @@
 from .models import ResNetMCD, ResNetQR
 from .datasets import FlareHelioviewerRegDataset, FlareSuryaClsDataset
-from .explainability import LaplaceWrapper, CQRWrapper, CPWrapper
+from .explainability import LaplaceWrapper, CQRWrapper, CPWrapper, ClsCPWrapper, APSWrapper, OrdinalAPSWrapper
 
 __version__ = "0.1.0"
 
@@ -12,5 +12,8 @@ __all__ = [
     "LaplaceWrapper",
     "CQRWrapper",
     "CPWrapper",
+    "ClsCPWrapper",
+    "APSWrapper",
+    "OrdinalAPSWrapper",
     "__version__",
 ]

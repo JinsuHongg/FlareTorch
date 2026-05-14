@@ -1,0 +1,48 @@
+hydra:
+  run:
+    dir: .
+
+experiment:
+  task: classification
+  ckpt_file_name: resnet18_cls_oaps_calibration
+
+data:
+  repo: nasa-ibm-ai4science/surya-bench-flare-forecasting
+  ref_mask_img: null
+  flare_index:
+    path: /scratch/users/jhong36/data/
+    train: train.csv
+    val: validation.csv
+    test: test.csv
+    cal: validation.csv 
+  input_zarr_path: /scratch/users/jhong36/data/sdo_512.zarr
+  input_time_delta: [0]
+  input_stat_path: ./assets/stats/los_mag_stat.yaml
+  label_type: max_goes_class
+  limb_mask_path: ./assets/limb_mask.npy
+  target_norm_type: multi_class
+  num_workers: 6
+  batch_size: 256
+  pin_memory: true
+
+check_point:
+  model_type: resnet
+  base: ./assets/checkpoints/cls/
+  resnet18_cls: resnet18_cls.ckpt
+
+uc:
+  csv_path: ./assets/uc_results/
+  significance_level: 0.1
+  method: oaps # lac, aps, or oaps
+  num_classes: 5
+  
+trainer:
+  accelerator: gpu
+  devices: 1
+  num_nodes: 1
+  precision: 32
+
+wandb:
+  save_dir: ./assets
+  entity: gsu-dmlab
+  project: uncertainty-flare-classification
