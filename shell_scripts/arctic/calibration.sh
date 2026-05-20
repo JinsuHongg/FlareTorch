@@ -8,8 +8,8 @@
 #SBATCH --time=12:00:00
 #SBATCH --mem=64G
 #SBATCH --job-name=uqcalibration
-#SBATCH --output=calibration_%j.out
-#SBATCH --error=calibration_%j.err
+#SBATCH --output=./logs/calibration_%j.out
+#SBATCH --error=./logs/calibration_%j.err
 
 # Navigate to project root
 if [ -n "$SLURM_SUBMIT_DIR" ]; then

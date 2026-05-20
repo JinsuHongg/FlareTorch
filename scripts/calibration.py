@@ -10,7 +10,10 @@ import torch
 # from torch.utils.data import DataLoader
 import lightning as L
 
-from flaretorch.datamodules import FlareHelioviewerRegDataModule, FlareSuryaBenchDataModule
+from flaretorch.datamodules import (
+    FlareHelioviewerRegDataModule,
+    FlareSuryaBenchDataModule,
+)
 from flaretorch.explainability import LaplaceWrapper, CQRWrapper, CPWrapper
 from flaretorch.models import ResNetMCD, ResNetQR
 
@@ -65,7 +68,7 @@ def save_batch_to_csv(file_path, batch_dict, header_written=False):
 
 
 @hydra.main(
-    config_path="../../../configs/",
+    config_path="../configs/",
     config_name="resnet34_calibration.yaml",
     version_base=None,
 )

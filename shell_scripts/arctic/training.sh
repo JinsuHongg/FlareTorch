@@ -8,8 +8,8 @@
 #SBATCH --time=24:00:00
 #SBATCH --mem=64G
 #SBATCH --job-name=uqtraining
-#SBATCH --output=training_%j.out
-#SBATCH --error=training_%j.err
+#SBATCH --output=./logs/training_%j.out
+#SBATCH --error=./logs/training_%j.err
 
 # Use SLURM_SUBMIT_DIR to find the project root
 # This is where you were when you ran 'sbatch'
