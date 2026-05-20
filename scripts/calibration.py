@@ -10,7 +10,7 @@ import torch
 # from torch.utils.data import DataLoader
 import lightning as L
 
-from flaretorch.datamodules import FlareHelioviewerRegDataModule
+from flaretorch.datamodules import FlareHelioviewerRegDataModule, FlareSuryaBenchDataModule
 from flaretorch.explainability import LaplaceWrapper, CQRWrapper, CPWrapper
 from flaretorch.models import ResNetMCD, ResNetQR
 
@@ -70,7 +70,10 @@ def save_batch_to_csv(file_path, batch_dict, header_written=False):
     version_base=None,
 )
 def run_uc_cal(cfg):
-    datamodule = FlareHelioviewerRegDataModule(cfg=cfg)
+    if "input_zarr_path" in cfg.data:
+        datamodule = FlareSuryaBenchDataModule(cfg=cfg)
+    else:
+        datamodule = FlareHelioviewerRegDataModule(cfg=cfg)
     datamodule.setup(stage="calibrate")
     datamodule.setup(stage="test")
 
