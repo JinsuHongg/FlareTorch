@@ -27,8 +27,8 @@ data:
 check_point:
   model_type: resnet
   base: ./assets/checkpoints/
-  mcd: qr/resnet18_mcd.ckpt  # Placeholder: Update with actual MCD checkpoint filename
-  qr: qr/resnet18_qr.ckpt    # Placeholder: Update with actual QR checkpoint filename
+  mcd: null
+  qr: qr/kucqvkv8_resnet18_qr_q89_epoch=9-val_loss=0.1103.ckpt
 
 uc:
   csv_path: ./assets/uc_results/
