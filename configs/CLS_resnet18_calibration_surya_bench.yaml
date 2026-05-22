@@ -33,7 +33,7 @@ check_point:
 uc:
   csv_path: ./assets/uc_results/
   significance_level: 0.1
-  method: oaps # lac, aps, or oaps
+  method: [lac, aps, oaps] # lac, aps, or oaps
   num_classes: 5
   
 trainer:
