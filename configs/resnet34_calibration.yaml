@@ -51,6 +51,7 @@ uc:
   cqr:
     lower_idx: 0
     upper_idx: 2
+  methods: ["mcd", "cp", "cqr", "lp"]
   
 trainer:
   accelerator: gpu

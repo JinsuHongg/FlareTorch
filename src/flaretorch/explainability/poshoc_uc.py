@@ -253,7 +253,128 @@ class CQRWrapper(L.LightningModule):
         }
 
 
-class SafeLaplaceModel(nn.Module):
+class OrdinalCQRWrapper(L.LightningModule):
+    """Ordinal Conformalized Quantile Regression (OrdinalCQR) wrapper.
+
+    Provides class-conditional interval coverage for ordinal flare classes.
+    """
+
+    def __init__(
+        self,
+        trained_model: L.LightningModule,
+        alpha: float = 0.1,
+        lower_idx: int = 0,
+        upper_idx: int = -1,
+    ):
+        super().__init__()
+        self.base_model = trained_model
+        self.alpha = alpha
+        self.lower_idx = lower_idx
+        self.upper_idx = upper_idx
+        self.class_names = ["A", "B", "C", "M", "X"]
+        # Thresholds to map log intensity to classes
+        self.thresholds = [2.0, 3.0, 4.0, 5.0]
+
+        # Register buffer for class-specific correction factors
+        # 5 classes: A, B, C, M, X
+        self.register_buffer("q_hats", torch.ones(5) * 0.0)
+
+    def value_to_class(self, val):
+        """Maps log intensity value to class index [0, 4]"""
+        if val < self.thresholds[0]: return 0
+        elif val < self.thresholds[1]: return 1
+        elif val < self.thresholds[2]: return 2
+        elif val < self.thresholds[3]: return 3
+        else: return 4
+
+    def calibrate(self, calibration_dataloader):
+        """Runs class-conditional calibration."""
+        lgr_logger.info("Starting OrdinalCQR Calibration...")
+        self.base_model.eval()
+        
+        # Group scores by true class
+        class_scores = [[] for _ in range(5)]
+        device = self.device
+        
+        with torch.no_grad():
+            for batch in calibration_dataloader:
+                x, y, _ = batch
+                x, y = x.to(device), y.to(device)
+                
+                preds = self.base_model(x)
+                y = y.squeeze()
+                pred_lo = preds[:, self.lower_idx]
+                pred_hi = preds[:, self.upper_idx]
+                
+                # CQR Score = max( lower - y, y - upper )
+                scores = torch.max(pred_lo - y, y - pred_hi)
+                
+                for i in range(len(y)):
+                    cls_idx = self.value_to_class(y[i].item())
+                    class_scores[cls_idx].append(scores[i].item())
+
+        # Compute Quantile for each class
+        for i in range(5):
+            if len(class_scores[i]) > 0:
+                scores_tensor = torch.tensor(class_scores[i])
+                n = len(scores_tensor)
+                q_level = np.ceil((n + 1) * (1 - self.alpha)) / n
+                q_level = min(1.0, max(0.0, q_level))
+                self.q_hats[i] = torch.quantile(scores_tensor, q_level)
+            else:
+                # Fallback: global quantile if class is empty
+                lgr_logger.warning(f"Class {self.class_names[i]} has no samples. Using 0.0 correction.")
+                self.q_hats[i] = 0.0
+
+        lgr_logger.info(f"OrdinalCQR Calibration Complete. Q_hats: {self.q_hats}")
+
+    def get_class_set(self, L, U):
+        """Returns set of flare classes covered by interval [L, U]"""
+        set_classes = []
+        # Class intervals:
+        # A: (-inf, 2), B: [2, 3), C: [3, 4), M: [4, 5), X: [5, inf)
+        intervals = [
+            (-float('inf'), 2.0),
+            (2.0, 3.0),
+            (3.0, 4.0),
+            (4.0, 5.0),
+            (5.0, float('inf'))
+        ]
+        
+        for i, (t_start, t_end) in enumerate(intervals):
+            # Overlap if L < t_end and U > t_start
+            if L < t_end and U > t_start:
+                set_classes.append(self.class_names[i])
+        return ",".join(set_classes)
+
+    def predict_step(self, batch, batch_idx):
+        """Returns corrected interval and covered class set."""
+        x, _, _ = batch
+        preds = self.base_model(x)
+        
+        pred_lo = preds[:, self.lower_idx]
+        pred_hi = preds[:, self.upper_idx]
+        pred_mid = preds[:, 1] # Assumes mid is index 1
+        
+        lowers = []
+        uppers = []
+        sets = []
+        
+        for i in range(len(pred_lo)):
+            mid_val = pred_mid[i].item()
+            cls_idx = self.value_to_class(mid_val)
+            q_hat = self.q_hats[cls_idx]
+            
+            lowers.append((pred_lo[i] - q_hat).item())
+            uppers.append((pred_hi[i] + q_hat).item())
+            sets.append(self.get_class_set(lowers[-1], uppers[-1]))
+            
+        return {
+            "lower": lowers,
+            "upper": uppers,
+            "class_set": sets
+        }
+
     """Wrapper to ensure consistent input/output shapes for Laplace approximation.
 
     This wrapper ensures that the input is always 5D and the output is always 2D,
