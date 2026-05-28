@@ -262,6 +262,9 @@ class OrdinalCQRWrapper(L.LightningModule):
     def __init__(
         self,
         trained_model: L.LightningModule,
+        num_classes: int,
+        class_mapping: dict,
+        thresholds: list,
         alpha: float = 0.1,
         lower_idx: int = 0,
         upper_idx: int = -1,
@@ -271,47 +274,69 @@ class OrdinalCQRWrapper(L.LightningModule):
         self.alpha = alpha
         self.lower_idx = lower_idx
         self.upper_idx = upper_idx
-        self.class_names = ["A", "B", "C", "M", "X"]
-        # Thresholds to map log intensity to classes
-        self.thresholds = [2.0, 3.0, 4.0, 5.0]
+        self.class_names = class_mapping.keys()
+        self.thresholds = thresholds  # Use provided thresholds
 
         # Register buffer for class-specific correction factors
         # 5 classes: A, B, C, M, X
-        self.register_buffer("q_hats", torch.ones(5) * 0.0)
+        self.register_buffer("q_hats", torch.ones(num_classes) * 0.0)
 
-    def value_to_class(self, val):
-        """Maps log intensity value to class index [0, 4]"""
-        if val < self.thresholds[0]: return 0
-        elif val < self.thresholds[1]: return 1
-        elif val < self.thresholds[2]: return 2
-        elif val < self.thresholds[3]: return 3
-        else: return 4
+    def get_prediction_set(self, L, U, target_classes):
+        """Determines the prediction set (boolean mask) for a given interval [L, U] and target classes."""
+        batch_size = len(target_classes)
+        num_classes = len(self.class_mapping)
+        prediction_set = torch.zeros(
+            batch_size, num_classes, dtype=torch.bool, device=self.device
+        )
+
+        # Define class intervals based on thresholds
+        intervals = []
+        # Class A: (-inf, thresholds[0])
+        intervals.append((-float("inf"), self.thresholds[0]))
+        # Intermediate classes: [thresholds[i], thresholds[i+1])
+        for i in range(len(self.thresholds) - 1):
+            intervals.append((self.thresholds[i], self.thresholds[i + 1]))
+        # Class X: [thresholds[-1], inf)
+        intervals.append((self.thresholds[-1], float("inf")))
+
+        for i in range(batch_size):
+            for cls_idx, (t_start, t_end) in enumerate(intervals):
+                # Check for overlap between [L, U] and [t_start, t_end)
+                if L[i] < t_end and U[i] > t_start:
+                    prediction_set[i, cls_idx] = True
+        return prediction_set
 
     def calibrate(self, calibration_dataloader):
         """Runs class-conditional calibration."""
         lgr_logger.info("Starting OrdinalCQR Calibration...")
         self.base_model.eval()
-        
+
         # Group scores by true class
-        class_scores = [[] for _ in range(5)]
+        class_scores = [[] for _ in range(self.num_classes)]
         device = self.device
-        
+
         with torch.no_grad():
             for batch in calibration_dataloader:
                 x, y, _ = batch
                 x, y = x.to(device), y.to(device)
-                
+
                 preds = self.base_model(x)
                 y = y.squeeze()
                 pred_lo = preds[:, self.lower_idx]
                 pred_hi = preds[:, self.upper_idx]
-                
+
                 # CQR Score = max( lower - y, y - upper )
                 scores = torch.max(pred_lo - y, y - pred_hi)
-                
+
                 for i in range(len(y)):
-                    cls_idx = self.value_to_class(y[i].item())
-                    class_scores[cls_idx].append(scores[i].item())
+                    # Map true class label to integer index using provided mapping
+                    try:
+                        cls_idx = self.class_mapping[str(y[i].item()).upper()]
+                        class_scores[cls_idx].append(scores[i].item())
+                    except KeyError:
+                        lgr_logger.warning(
+                            f"Target class {y[i].item()} not found in class mapping. Skipping."
+                        )
 
         # Compute Quantile for each class
         for i in range(5):
@@ -323,7 +348,9 @@ class OrdinalCQRWrapper(L.LightningModule):
                 self.q_hats[i] = torch.quantile(scores_tensor, q_level)
             else:
                 # Fallback: global quantile if class is empty
-                lgr_logger.warning(f"Class {self.class_names[i]} has no samples. Using 0.0 correction.")
+                lgr_logger.warning(
+                    f"Class {self.class_names[i]} has no samples. Using 0.0 correction."
+                )
                 self.q_hats[i] = 0.0
 
         lgr_logger.info(f"OrdinalCQR Calibration Complete. Q_hats: {self.q_hats}")
@@ -334,13 +361,13 @@ class OrdinalCQRWrapper(L.LightningModule):
         # Class intervals:
         # A: (-inf, 2), B: [2, 3), C: [3, 4), M: [4, 5), X: [5, inf)
         intervals = [
-            (-float('inf'), 2.0),
+            (-float("inf"), 2.0),
             (2.0, 3.0),
             (3.0, 4.0),
             (4.0, 5.0),
-            (5.0, float('inf'))
+            (5.0, float("inf")),
         ]
-        
+
         for i, (t_start, t_end) in enumerate(intervals):
             # Overlap if L < t_end and U > t_start
             if L < t_end and U > t_start:
@@ -351,45 +378,54 @@ class OrdinalCQRWrapper(L.LightningModule):
         """Returns corrected interval and covered class set."""
         x, _, _ = batch
         preds = self.base_model(x)
-        
+
         pred_lo = preds[:, self.lower_idx]
         pred_hi = preds[:, self.upper_idx]
-        pred_mid = preds[:, 1] # Assumes mid is index 1
-        
+        # For ordinal regression, we often predict the midpoint or a value related to it.
+        # Here, we'll use the mean of the lower and upper bounds as a proxy for the prediction that informs class mapping.
+        pred_mid_proxy = (pred_lo + pred_hi) / 2
+
         lowers = []
         uppers = []
-        sets = []
-        
+        targets = []
+
+        # Map true labels to integer indices
+        for true_val in y.squeeze():
+            try:
+                # Assuming y contains raw values that need mapping to class indices
+                # This part might need adjustment based on the actual format of 'y' in the dataloader
+                # For now, attempting a string conversion and lookup
+                class_idx = self.class_mapping.get(str(true_val.item()).upper(), -1)
+                if class_idx == -1:
+                    lgr_logger.warning(
+                        f"Could not map target value {true_val.item()} to a class index."
+                    )
+                targets.append(class_idx)
+            except Exception as e:
+                lgr_logger.error(f"Error mapping target value {true_val.item()}: {e}")
+                targets.append(
+                    -1
+                )  # Append a placeholder or handle error as appropriate
+
+        targets_tensor = torch.tensor(targets, device=pred_lo.device)
+
+        # Generate prediction sets using the new helper method
+        prediction_sets = self.get_prediction_set(pred_lo, pred_hi, targets_tensor)
+
         for i in range(len(pred_lo)):
-            mid_val = pred_mid[i].item()
-            cls_idx = self.value_to_class(mid_val)
-            q_hat = self.q_hats[cls_idx]
-            
-            lowers.append((pred_lo[i] - q_hat).item())
-            uppers.append((pred_hi[i] + q_hat).item())
-            sets.append(self.get_class_set(lowers[-1], uppers[-1]))
-            
+            lowers.append(
+                (pred_lo[i]).item()
+            )  # Keep original pred_lo for potential future use
+            uppers.append(
+                (pred_hi[i]).item()
+            )  # Keep original pred_hi for potential future use
+
         return {
             "lower": lowers,
             "upper": uppers,
-            "class_set": sets
+            "prediction_set": prediction_sets,
+            "target": targets_tensor,  # Return mapped integer targets
         }
-
-    """Wrapper to ensure consistent input/output shapes for Laplace approximation.
-
-    This wrapper ensures that the input is always 5D and the output is always 2D,
-    which is required by some Laplace approximation implementations.
-
-    Args:
-        model: The underlying PyTorch model.
-
-    Attributes:
-        model: The underlying PyTorch model.
-    """
-
-    def __init__(self, model):
-        super().__init__()
-        self.model = model
 
     def forward(self, x):
         """Forward pass with shape adjustments.
@@ -569,7 +605,12 @@ class ClsCPWrapper(L.LightningModule):
         q_hat: The calculated quantile for prediction sets.
     """
 
-    def __init__(self, trained_model: L.LightningModule, num_classes: int = 5, alpha: float = 0.05):
+    def __init__(
+        self,
+        trained_model: L.LightningModule,
+        num_classes: int = 5,
+        alpha: float = 0.05,
+    ):
         super().__init__()
         self.base_model = trained_model
         self.alpha = alpha
@@ -666,7 +707,12 @@ class APSWrapper(L.LightningModule):
         q_hat: The calculated quantile for prediction sets.
     """
 
-    def __init__(self, trained_model: L.LightningModule, num_classes: int = 5, alpha: float = 0.05):
+    def __init__(
+        self,
+        trained_model: L.LightningModule,
+        num_classes: int = 5,
+        alpha: float = 0.05,
+    ):
         super().__init__()
         self.base_model = trained_model
         self.alpha = alpha
@@ -741,7 +787,9 @@ class APSWrapper(L.LightningModule):
         cum_probs, sorted_indices = self._compute_scores(probs)
 
         batch_size, K = probs.shape
-        prediction_sets = torch.zeros(batch_size, K, dtype=torch.bool, device=probs.device)
+        prediction_sets = torch.zeros(
+            batch_size, K, dtype=torch.bool, device=probs.device
+        )
 
         for i in range(batch_size):
             mask = cum_probs[i] <= self.q_hat
@@ -786,7 +834,12 @@ class OrdinalAPSWrapper(L.LightningModule):
         q_hat: The calculated quantile for prediction sets.
     """
 
-    def __init__(self, trained_model: L.LightningModule, num_classes: int = 5, alpha: float = 0.05):
+    def __init__(
+        self,
+        trained_model: L.LightningModule,
+        num_classes: int = 5,
+        alpha: float = 0.05,
+    ):
         super().__init__()
         self.base_model = trained_model
         self.alpha = alpha
@@ -815,8 +868,8 @@ class OrdinalAPSWrapper(L.LightningModule):
         for s in range(1, K + 1):
             s_probs = cumprobs[:, s:] - cumprobs[:, :-s]
             max_p, start_idx = torch.max(s_probs, dim=1)
-            P[:, s-1] = max_p
-            I_start[:, s-1] = start_idx
+            P[:, s - 1] = max_p
+            I_start[:, s - 1] = start_idx
         return P, I_start
 
     def _compute_score(self, probs, y):
@@ -824,10 +877,10 @@ class OrdinalAPSWrapper(L.LightningModule):
         B, K = probs.shape
         scores = torch.full((B,), 1.5, device=probs.device)
         for s in range(1, K + 1):
-            start = I_start[:, s-1]
+            start = I_start[:, s - 1]
             end = start + s - 1
             mask = (y >= start) & (y <= end)
-            scores = torch.where(mask & (P[:, s-1] < scores), P[:, s-1], scores)
+            scores = torch.where(mask & (P[:, s - 1] < scores), P[:, s - 1], scores)
         return scores
 
     def calibrate(self, dataloader):
@@ -853,7 +906,9 @@ class OrdinalAPSWrapper(L.LightningModule):
         q_level = np.ceil((n + 1) * (1 - self.alpha)) / n
         q_level = min(1.0, max(0.0, q_level))
         self.q_hat = torch.quantile(all_scores, q_level)
-        lgr_logger.info(f"Ordinal APS Calibration Complete. Q_hat = {self.q_hat.item():.4f}")
+        lgr_logger.info(
+            f"Ordinal APS Calibration Complete. Q_hat = {self.q_hat.item():.4f}"
+        )
 
     def predict_step(self, batch, batch_idx):
         """Returns the Ordinal Adaptive Prediction Set.
@@ -873,10 +928,10 @@ class OrdinalAPSWrapper(L.LightningModule):
         B, K = probs.shape
         prediction_sets = torch.zeros(B, K, dtype=torch.bool, device=probs.device)
         for s in range(1, K + 1):
-            mask = P[:, s-1] <= self.q_hat
+            mask = P[:, s - 1] <= self.q_hat
             for i in range(B):
                 if mask[i]:
-                    start = I_start[i, s-1]
+                    start = I_start[i, s - 1]
                     prediction_sets[i, start : start + s] = True
 
         return {

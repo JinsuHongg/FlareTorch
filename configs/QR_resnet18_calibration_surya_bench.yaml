@@ -43,9 +43,16 @@ uc:
     lower_idx: 0
     upper_idx: 2
   methods: ["cqr", "ordinal_cqr"]
+  num_classes: 5
+  class_mapping: {"FQ": 0, "B": 1, "C": 2, "M": 3, "X": 4}
   
 trainer:
   accelerator: gpu
   devices: 1
   num_nodes: 1
   precision: 32
+
+wandb:
+  save_dir: ./assets
+  entity: gsu-dmlab
+  project: uncertainty-flare-regression

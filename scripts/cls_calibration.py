@@ -21,7 +21,14 @@ class UQCSVWriter(BasePredictionWriter):
         self.header_written = False
 
     def write_on_batch_end(
-        self, trainer, pl_module, prediction, batch_indices, batch, batch_idx, dataloader_idx
+        self,
+        trainer,
+        pl_module,
+        prediction,
+        batch_indices,
+        batch,
+        batch_idx,
+        dataloader_idx,
     ):
         probs = prediction["probs"].cpu().numpy()
         prediction_sets = prediction["prediction_set"].cpu().numpy()
@@ -63,9 +70,13 @@ def run_uc_cal(cfg):
     test_loader = datamodule.test_dataloader()
 
     # Load Model
-    cls_pretrained_path = os.path.join(cfg.check_point.base, cfg.check_point.resnet18_cls)
-    model = ResNetCls.load_from_checkpoint(cls_pretrained_path, strict=False)
-    
+    cls_pretrained_path = os.path.join(
+        cfg.check_point.base, cfg.check_point.resnet18_cls
+    )
+    model = ResNetCls.load_from_checkpoint(
+        cls_pretrained_path, strict=False, weights_only=False
+    )
+
     # Move model to device once
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
@@ -83,19 +94,25 @@ def run_uc_cal(cfg):
 
         match method_name:
             case "lac":
-                wrapper = ClsCPWrapper(trained_model=model, num_classes=num_classes, alpha=alpha)
+                wrapper = ClsCPWrapper(
+                    trained_model=model, num_classes=num_classes, alpha=alpha
+                )
             case "aps":
-                wrapper = APSWrapper(trained_model=model, num_classes=num_classes, alpha=alpha)
+                wrapper = APSWrapper(
+                    trained_model=model, num_classes=num_classes, alpha=alpha
+                )
             case "oaps":
-                wrapper = OrdinalAPSWrapper(trained_model=model, num_classes=num_classes, alpha=alpha)
+                wrapper = OrdinalAPSWrapper(
+                    trained_model=model, num_classes=num_classes, alpha=alpha
+                )
             case _:
                 raise ValueError(f"Unknown method: {method_name}")
-        
+
         # Calibration
         wrapper.to(device)
         lgr_logger.info(f"Running Calibration for {method_name}...")
         wrapper.calibrate(calibration_loader)
-        
+
         # Loggers
         method_output_dir = os.path.join(cfg.uc.csv_path, method_name)
         os.makedirs(method_output_dir, exist_ok=True)
@@ -110,18 +127,20 @@ def run_uc_cal(cfg):
 
         # Trainer for Testing
         trainer = L.Trainer(
-            accelerator=cfg.trainer.accelerator, 
-            devices=cfg.trainer.devices, 
+            accelerator=cfg.trainer.accelerator,
+            devices=cfg.trainer.devices,
             logger=[wandb_logger, csv_logger],
-            callbacks=[UQCSVWriter(output_dir=method_output_dir, method_name=method_name)]
+            callbacks=[
+                UQCSVWriter(output_dir=method_output_dir, method_name=method_name)
+            ],
         )
-        
+
         lgr_logger.info(f"Running Evaluation on Test Set for {method_name}...")
         trainer.test(wrapper, test_loader)
-        
+
         lgr_logger.info(f"Running Prediction to Save CSV for {method_name}...")
         trainer.predict(wrapper, test_loader)
-        
+
         lgr_logger.info(f"Finished run for UQ method: {method_name}")
 
     lgr_logger.info("All UQ methods processed.")
