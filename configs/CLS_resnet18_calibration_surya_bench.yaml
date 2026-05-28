@@ -28,12 +28,12 @@ data:
 check_point:
   model_type: resnet
   base: ./assets/checkpoints/cls/
-  resnet18_cls: resnet18_cls.ckpt
+  resnet18_cls: viqoe2ya_resnet18_cls_epoch=4-val_loss=1.0264.ckpt
 
 uc:
   csv_path: ./assets/uc_results/
   significance_level: 0.1
-  method: [lac, aps, oaps] # lac, aps, or oaps
+  method: [aps, oaps] # lac, aps, or oaps
   num_classes: 5
   
 trainer:
