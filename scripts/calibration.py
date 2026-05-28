@@ -150,7 +150,7 @@ def run_uc_cal(cfg):
             qr,
             num_classes=cfg.uc.num_classes,  # Assuming num_classes is in cfg.data
             class_mapping=cfg.uc.class_mapping,
-            thresholds=cfg.uc.cqr.thresholds,  # Assuming thresholds are defined in config
+            thresholds=cfg.uc.thresholds,  # Assuming thresholds are defined in config
             alpha=alpha,
             lower_idx=cfg.uc.cqr.lower_idx,
             upper_idx=cfg.uc.cqr.upper_idx,
@@ -206,7 +206,6 @@ def run_uc_cal(cfg):
         devices=cfg.trainer.devices,
         logger=loggers,  # Pass the list of loggers
     )
-
 
     results = {}
 

@@ -45,6 +45,7 @@ uc:
   methods: ["cqr", "ordinal_cqr"]
   num_classes: 5
   class_mapping: {"FQ": 0, "B": 1, "C": 2, "M": 3, "X": 4}
+  thresholds: [2,3,4,5]
   
 trainer:
   accelerator: gpu
