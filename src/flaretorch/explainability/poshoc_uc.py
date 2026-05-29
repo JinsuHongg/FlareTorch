@@ -282,6 +282,7 @@ class OrdinalCQRWrapper(L.LightningModule):
         # Register buffer for class-specific correction factors
         # 5 classes: A, B, C, M, X
         self.register_buffer("q_hats", torch.ones(num_classes) * 0.0)
+        self.test_uq_metrics = ClassificationUQMetrics(num_classes=num_classes)
 
     def _get_class_idx_from_value(self, value):
         v = value.item()
@@ -417,6 +418,16 @@ class OrdinalCQRWrapper(L.LightningModule):
             "prediction_set": prediction_sets,
             "target": targets_tensor,  # Return mapped integer targets
         }
+
+    def test_step(self, batch, batch_idx):
+        out = self.predict_step(batch, batch_idx)
+        self.test_uq_metrics.update(out["prediction_set"], out["target"])
+        return out
+
+    def on_test_epoch_end(self):
+        results = self.test_uq_metrics.compute()
+        self.log_dict({f"test_{k}": v for k, v in results.items()}, prog_bar=True)
+        self.test_uq_metrics.reset()
 
     def forward(self, x):
         """Forward pass with shape adjustments.

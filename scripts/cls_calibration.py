@@ -151,6 +151,9 @@ def run_uc_cal(cfg):
     results = {}
 
     for method_name, wrapper in wrappers.items():
+        lgr_logger.info(f"Running Metrics Evaluation for {method_name}...")
+        trainer.test(wrapper, test_loader)
+        
         lgr_logger.info(f"Running Prediction for {method_name}...")
         results[method_name] = trainer.predict(wrapper, test_loader)
 
