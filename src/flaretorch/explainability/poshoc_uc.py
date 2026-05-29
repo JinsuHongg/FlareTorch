@@ -274,12 +274,23 @@ class OrdinalCQRWrapper(L.LightningModule):
         self.alpha = alpha
         self.lower_idx = lower_idx
         self.upper_idx = upper_idx
-        self.class_names = class_mapping.keys()
+        self.class_names = list(class_mapping.keys())
+        self.class_mapping = class_mapping
+        self.num_classes = num_classes
         self.thresholds = thresholds  # Use provided thresholds
 
         # Register buffer for class-specific correction factors
         # 5 classes: A, B, C, M, X
         self.register_buffer("q_hats", torch.ones(num_classes) * 0.0)
+
+    def _get_class_idx_from_value(self, value):
+        v = value.item()
+        if v < self.thresholds[0]:
+            return 0
+        for i in range(len(self.thresholds) - 1):
+            if self.thresholds[i] <= v < self.thresholds[i + 1]:
+                return i + 1
+        return len(self.thresholds)
 
     def get_prediction_set(self, L, U, target_classes):
         """Determines the prediction set (boolean mask) for a given interval [L, U] and target classes."""
@@ -329,14 +340,8 @@ class OrdinalCQRWrapper(L.LightningModule):
                 scores = torch.max(pred_lo - y, y - pred_hi)
 
                 for i in range(len(y)):
-                    # Map true class label to integer index using provided mapping
-                    try:
-                        cls_idx = self.class_mapping[str(y[i].item()).upper()]
-                        class_scores[cls_idx].append(scores[i].item())
-                    except KeyError:
-                        lgr_logger.warning(
-                            f"Target class {y[i].item()} not found in class mapping. Skipping."
-                        )
+                    cls_idx = self._get_class_idx_from_value(y[i])
+                    class_scores[cls_idx].append(scores[i].item())
 
         # Compute Quantile for each class
         for i in range(5):
@@ -360,13 +365,11 @@ class OrdinalCQRWrapper(L.LightningModule):
         set_classes = []
         # Class intervals:
         # A: (-inf, 2), B: [2, 3), C: [3, 4), M: [4, 5), X: [5, inf)
-        intervals = [
-            (-float("inf"), 2.0),
-            (2.0, 3.0),
-            (3.0, 4.0),
-            (4.0, 5.0),
-            (5.0, float("inf")),
-        ]
+        intervals = []
+        intervals.append((-float("inf"), self.thresholds[0]))
+        for i in range(len(self.thresholds) - 1):
+            intervals.append((self.thresholds[i], self.thresholds[i + 1]))
+        intervals.append((self.thresholds[-1], float("inf")))
 
         for i, (t_start, t_end) in enumerate(intervals):
             # Overlap if L < t_end and U > t_start
@@ -376,7 +379,7 @@ class OrdinalCQRWrapper(L.LightningModule):
 
     def predict_step(self, batch, batch_idx):
         """Returns corrected interval and covered class set."""
-        x, _, _ = batch
+        x, y, _ = batch
         preds = self.base_model(x)
 
         pred_lo = preds[:, self.lower_idx]
@@ -391,21 +394,9 @@ class OrdinalCQRWrapper(L.LightningModule):
 
         # Map true labels to integer indices
         for true_val in y.squeeze():
-            try:
-                # Assuming y contains raw values that need mapping to class indices
-                # This part might need adjustment based on the actual format of 'y' in the dataloader
-                # For now, attempting a string conversion and lookup
-                class_idx = self.class_mapping.get(str(true_val.item()).upper(), -1)
-                if class_idx == -1:
-                    lgr_logger.warning(
-                        f"Could not map target value {true_val.item()} to a class index."
-                    )
-                targets.append(class_idx)
-            except Exception as e:
-                lgr_logger.error(f"Error mapping target value {true_val.item()}: {e}")
-                targets.append(
-                    -1
-                )  # Append a placeholder or handle error as appropriate
+            targets.append(self._get_class_idx_from_value(true_val))
+
+        targets_tensor = torch.tensor(targets, device=pred_lo.device)
 
         targets_tensor = torch.tensor(targets, device=pred_lo.device)
 
@@ -439,7 +430,7 @@ class OrdinalCQRWrapper(L.LightningModule):
         if x.ndim == 4:
             x = x.unsqueeze(2)
 
-        out = self.model(x)
+        out = self.base_model(x)
 
         # Fix Output Shape (1D -> 2D)
         if out.ndim == 1:
