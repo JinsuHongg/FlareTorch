@@ -53,7 +53,10 @@ def save_batch_to_csv(file_path, batch_dict, header_written=False):
                     item = None
 
             if isinstance(item, torch.Tensor):
-                item = item.item()
+                if item.ndim == 0:
+                    item = item.item()
+                else:
+                    item = item.tolist()
 
             row[k] = item
         rows.append(row)
