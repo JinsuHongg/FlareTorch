@@ -43,7 +43,10 @@ def save_batch_to_csv(file_path, batch_dict, header_written=False):
                     item = None
 
             if isinstance(item, torch.Tensor):
-                item = item.item()
+                if item.ndim == 0:
+                    item = item.item()
+                else:
+                    item = item.tolist()
 
             row[k] = item
         rows.append(row)
@@ -57,7 +60,6 @@ def save_batch_to_csv(file_path, batch_dict, header_written=False):
         writer.writerows(rows)
 
 
-
 from flaretorch.datamodules import FlareSuryaBenchDataModule
 from flaretorch.explainability import ClsCPWrapper, APSWrapper, OrdinalAPSWrapper
 from flaretorch.models import ResNetCls
@@ -69,6 +71,7 @@ from flaretorch.models import ResNetCls
     version_base=None,
 )
 def run_uc_cal(cfg):
+    methods = cfg.uc.get("methods", ["aps"])
     datamodule = FlareSuryaBenchDataModule(cfg=cfg)
     datamodule.setup(stage="calibrate")
     datamodule.setup(stage="test")
@@ -153,7 +156,7 @@ def run_uc_cal(cfg):
     for method_name, wrapper in wrappers.items():
         lgr_logger.info(f"Running Metrics Evaluation for {method_name}...")
         trainer.test(wrapper, test_loader)
-        
+
         lgr_logger.info(f"Running Prediction for {method_name}...")
         results[method_name] = trainer.predict(wrapper, test_loader)
 
@@ -162,12 +165,14 @@ def run_uc_cal(cfg):
 
     for method, preds in results.items():
         # Construct the path using the method name and alpha value from config
-        path = os.path.join(cfg.uc.csv_path, f"{method}_alpha{cfg.uc.significance_level}_result_testset.csv")
+        path = os.path.join(
+            cfg.uc.csv_path,
+            f"{method}_alpha{cfg.uc.significance_level}_result_testset.csv",
+        )
         for i, batch_res in enumerate(preds):
             save_batch_to_csv(path, batch_res, header_written=(i > 0))
 
     lgr_logger.info("All UQ methods processed.")
-
 
 
 if __name__ == "__main__":

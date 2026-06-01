@@ -3,6 +3,7 @@ import csv
 import hydra
 from loguru import logger as lgr_logger
 import torch
+import lightning as L
 from lightning.pytorch.loggers import WandbLogger, CSVLogger
 
 from flaretorch.datamodules import (
