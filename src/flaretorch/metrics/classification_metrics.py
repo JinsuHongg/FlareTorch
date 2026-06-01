@@ -96,7 +96,7 @@ class ClassificationUQMetrics(Metric):
 
         # Marginal Coverage
         # Check if true class is in prediction set
-        coverage = torch.gather(prediction_sets, 1, target.unsqueeze(1)).squeeze()
+        coverage = torch.gather(prediction_sets, 1, target.unsqueeze(1)).squeeze(1)
         self.coverage.append(coverage.float())
 
         # Set Size

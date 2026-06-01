@@ -99,20 +99,39 @@ def run_uc_cal(cfg):
 
         alpha = cfg.uc.significance_level
         num_classes = cfg.uc.num_classes
+        class_wise = cfg.uc.get("class_wise", False)
+        class_mapping = cfg.uc.get("class_mapping", {"FQ": 0, "B": 1, "C": 2, "M": 3, "X": 4})
+        thresholds = cfg.uc.get("thresholds", [2, 3, 4, 5])
+        
         wrapper = None
 
         match method_name:
             case "lac":
                 wrapper = ClsCPWrapper(
-                    trained_model=model, num_classes=num_classes, alpha=alpha
+                    trained_model=model, 
+                    num_classes=num_classes, 
+                    alpha=alpha,
+                    class_wise=class_wise,
+                    class_mapping=class_mapping,
+                    thresholds=thresholds
                 )
             case "aps":
                 wrapper = APSWrapper(
-                    trained_model=model, num_classes=num_classes, alpha=alpha
+                    trained_model=model, 
+                    num_classes=num_classes, 
+                    alpha=alpha,
+                    class_wise=class_wise,
+                    class_mapping=class_mapping,
+                    thresholds=thresholds
                 )
             case "oaps":
                 wrapper = OrdinalAPSWrapper(
-                    trained_model=model, num_classes=num_classes, alpha=alpha
+                    trained_model=model, 
+                    num_classes=num_classes, 
+                    alpha=alpha,
+                    class_wise=class_wise,
+                    class_mapping=class_mapping,
+                    thresholds=thresholds
                 )
             case _:
                 raise ValueError(f"Unknown method: {method_name}")

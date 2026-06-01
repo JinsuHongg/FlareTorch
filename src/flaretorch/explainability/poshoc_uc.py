@@ -612,12 +612,32 @@ class ClsCPWrapper(L.LightningModule):
         trained_model: L.LightningModule,
         num_classes: int = 5,
         alpha: float = 0.05,
+        class_wise: bool = False,
+        class_mapping: dict = None,
+        thresholds: list = None,
     ):
         super().__init__()
         self.base_model = trained_model
         self.alpha = alpha
-        self.register_buffer("q_hat", torch.tensor(1.0))
+        self.class_wise = class_wise
+        self.num_classes = num_classes
+        self.class_mapping = class_mapping or {"FQ": 0, "B": 1, "C": 2, "M": 3, "X": 4}
+        self.thresholds = thresholds or [2, 3, 4, 5]
+        
+        if self.class_wise:
+            self.register_buffer("q_hats", torch.ones(num_classes) * 1.0)
+        else:
+            self.register_buffer("q_hat", torch.tensor(1.0))
         self.test_uq_metrics = ClassificationUQMetrics(num_classes=num_classes)
+
+    def _get_class_idx_from_value(self, value):
+        v = value.item()
+        if v < self.thresholds[0]:
+            return 0
+        for i in range(len(self.thresholds) - 1):
+            if self.thresholds[i] <= v < self.thresholds[i + 1]:
+                return i + 1
+        return len(self.thresholds)
 
     def forward(self, x):
         """Forward pass using the base model.
@@ -631,14 +651,13 @@ class ClsCPWrapper(L.LightningModule):
         return self.base_model(x)
 
     def calibrate(self, dataloader):
-        """Runs calibration to find the scalar 'q_hat'.
-
-        Args:
-            dataloader: DataLoader for the calibration set.
-        """
+        """Runs calibration to find the scalar 'q_hat'."""
         lgr_logger.info("Starting Classification CP (LAC) Calibration...")
         self.base_model.eval()
-        scores = []
+        if self.class_wise:
+            class_scores = [[] for _ in range(self.num_classes)]
+        else:
+            scores = []
         device = self.device
         with torch.no_grad():
             for batch in dataloader:
@@ -646,34 +665,50 @@ class ClsCPWrapper(L.LightningModule):
                 x, y = x.to(device), y.to(device)
                 logits = self.base_model(x)
                 probs = torch.softmax(logits, dim=1)
-                # LAC score: 1 - prob of true class
                 true_probs = probs[torch.arange(len(y)), y]
                 score = 1.0 - true_probs
-                scores.append(score)
-        scores = torch.cat(scores)
-        n = len(scores)
-        q_level = np.ceil((n + 1) * (1 - self.alpha)) / n
-        q_level = min(1.0, max(0.0, q_level))
-        self.q_hat = torch.quantile(scores, q_level)
-        lgr_logger.info(
-            f"Classification CP (LAC) Calibration Complete. Q_hat = {self.q_hat.item():.4f}"
-        )
+                if self.class_wise:
+                    for i in range(len(y)):
+                        cls_idx = self._get_class_idx_from_value(y[i])
+                        class_scores[cls_idx].append(score[i].item())
+                else:
+                    scores.append(score)
+        
+        if self.class_wise:
+            for i in range(self.num_classes):
+                if len(class_scores[i]) > 0:
+                    scores_tensor = torch.tensor(class_scores[i], device=device)
+                    n = len(scores_tensor)
+                    q_level = np.ceil((n + 1) * (1 - self.alpha)) / n
+                    q_level = min(1.0, max(0.0, q_level))
+                    self.q_hats[i] = torch.quantile(scores_tensor, q_level)
+                else:
+                    lgr_logger.warning(f"Class {i} has no samples. Using 1.0.")
+                    self.q_hats[i] = 1.0
+            lgr_logger.info(f"Calibration Complete. Q_hats = {self.q_hats}")
+        else:
+            scores = torch.cat(scores)
+            n = len(scores)
+            q_level = np.ceil((n + 1) * (1 - self.alpha)) / n
+            q_level = min(1.0, max(0.0, q_level))
+            self.q_hat = torch.quantile(scores, q_level)
+            lgr_logger.info(f"Calibration Complete. Q_hat = {self.q_hat.item():.4f}")
 
     def predict_step(self, batch, batch_idx):
-        """Returns the Conformal Prediction Set.
-
-        Args:
-            batch: The input batch.
-            batch_idx: Index of the batch.
-
-        Returns:
-            A dictionary containing 'probs', 'prediction_set', 'y_hat', and 'target'.
-        """
+        """Returns the Conformal Prediction Set."""
         x, y, _ = batch
         logits = self.base_model(x)
         probs = torch.softmax(logits, dim=1)
-        # Prediction set: {y : probs[y] >= 1 - q_hat}
-        prediction_sets = probs >= (1.0 - self.q_hat)
+        
+        if self.class_wise:
+            prediction_sets = torch.zeros(
+                probs.shape, dtype=torch.bool, device=probs.device
+            )
+            for k in range(self.num_classes):
+                prediction_sets[:, k] = probs[:, k] >= (1.0 - self.q_hats[k])
+        else:
+            prediction_sets = probs >= (1.0 - self.q_hat)
+            
         return {
             "probs": probs,
             "prediction_set": prediction_sets,
@@ -714,49 +749,56 @@ class APSWrapper(L.LightningModule):
         trained_model: L.LightningModule,
         num_classes: int = 5,
         alpha: float = 0.05,
+        class_wise: bool = False,
+        class_mapping: dict = None,
+        thresholds: list = None,
     ):
         super().__init__()
         self.base_model = trained_model
         self.alpha = alpha
-        self.register_buffer("q_hat", torch.tensor(1.0))
+        self.class_wise = class_wise
+        self.num_classes = num_classes
+        self.class_mapping = class_mapping or {"FQ": 0, "B": 1, "C": 2, "M": 3, "X": 4}
+        self.thresholds = thresholds or [2, 3, 4, 5]
+        
+        if self.class_wise:
+            self.register_buffer("q_hats", torch.ones(num_classes) * 1.0)
+        else:
+            self.register_buffer("q_hat", torch.tensor(1.0))
         self.test_uq_metrics = ClassificationUQMetrics(num_classes=num_classes)
 
-    def forward(self, x):
-        """Forward pass using the base model.
+    def _get_class_idx_from_value(self, value):
+        v = value.item()
+        if v < self.thresholds[0]:
+            return 0
+        for i in range(len(self.thresholds) - 1):
+            if self.thresholds[i] <= v < self.thresholds[i + 1]:
+                return i + 1
+        return len(self.thresholds)
 
-        Args:
-            x: Input tensor.
-
-        Returns:
-            Model logits.
-        """
-        return self.base_model(x)
-
-    def _compute_scores(self, probs, y=None):
-        # Sort probabilities in descending order
+    def _compute_class_aps_scores(self, probs):
+        # probs: (Batch, K)
+        batch_size, K = probs.shape
         sorted_probs, sorted_indices = torch.sort(probs, dim=1, descending=True)
-        # Cumulative sums
         cum_probs = torch.cumsum(sorted_probs, dim=1)
+        
+        ranks = torch.zeros(batch_size, K, dtype=torch.long, device=probs.device)
+        for i in range(batch_size):
+            ranks[i, sorted_indices[i]] = torch.arange(K, device=probs.device)
+            
+        # aps_scores[i, k] = APS score for class k in sample i
+        aps_scores = cum_probs[torch.arange(batch_size).unsqueeze(1), ranks]
+        return aps_scores
 
-        if y is not None:
-            # Find rank of true class y
-            # We want the index j such that sorted_indices[i, j] == y[i]
-            ranks = (sorted_indices == y.unsqueeze(1)).nonzero()[:, 1]
-            # Score is the cumulative sum up to the true class
-            scores = cum_probs[torch.arange(len(y)), ranks]
-            return scores
-        else:
-            return cum_probs, sorted_indices
 
     def calibrate(self, dataloader):
-        """Runs calibration to find the scalar 'q_hat'.
-
-        Args:
-            dataloader: DataLoader for the calibration set.
-        """
+        """Runs calibration to find the scalar 'q_hat'."""
         lgr_logger.info("Starting APS Calibration...")
         self.base_model.eval()
-        scores = []
+        if self.class_wise:
+            class_scores = [[] for _ in range(self.num_classes)]
+        else:
+            scores = []
         device = self.device
         with torch.no_grad():
             for batch in dataloader:
@@ -764,42 +806,73 @@ class APSWrapper(L.LightningModule):
                 x, y = x.to(device), y.to(device)
                 logits = self.base_model(x)
                 probs = torch.softmax(logits, dim=1)
-                score = self._compute_scores(probs, y)
-                scores.append(score)
-        scores = torch.cat(scores)
-        n = len(scores)
-        q_level = np.ceil((n + 1) * (1 - self.alpha)) / n
-        q_level = min(1.0, max(0.0, q_level))
-        self.q_hat = torch.quantile(scores, q_level)
-        lgr_logger.info(f"APS Calibration Complete. Q_hat = {self.q_hat.item():.4f}")
+                
+                if self.class_wise:
+                    aps_scores = self._compute_class_aps_scores(probs)
+                    for i in range(len(y)):
+                        cls_idx = self._get_class_idx_from_value(y[i])
+                        # The score for the true class y[i]
+                        class_scores[cls_idx].append(aps_scores[i, y[i]].item())
+                else:
+                    # Original logic
+                    sorted_probs, sorted_indices = torch.sort(probs, dim=1, descending=True)
+                    cum_probs = torch.cumsum(sorted_probs, dim=1)
+                    ranks = (sorted_indices == y.unsqueeze(1)).nonzero()[:, 1]
+                    score = cum_probs[torch.arange(len(y)), ranks]
+                    scores.append(score)
+                    
+        if self.class_wise:
+            for i in range(self.num_classes):
+                if len(class_scores[i]) > 0:
+                    scores_tensor = torch.tensor(class_scores[i], device=device)
+                    n = len(scores_tensor)
+                    q_level = np.ceil((n + 1) * (1 - self.alpha)) / n
+                    q_level = min(1.0, max(0.0, q_level))
+                    self.q_hats[i] = torch.quantile(scores_tensor, q_level)
+                else:
+                    lgr_logger.warning(f"Class {i} has no samples. Using 1.0.")
+                    self.q_hats[i] = 1.0
+            lgr_logger.info(f"Calibration Complete. Q_hats = {self.q_hats}")
+        else:
+            scores = torch.cat(scores)
+            n = len(scores)
+            q_level = np.ceil((n + 1) * (1 - self.alpha)) / n
+            q_level = min(1.0, max(0.0, q_level))
+            self.q_hat = torch.quantile(scores, q_level)
+            lgr_logger.info(f"Calibration Complete. Q_hat = {self.q_hat.item():.4f}")
 
     def predict_step(self, batch, batch_idx):
-        """Returns the Adaptive Prediction Set.
-
-        Args:
-            batch: The input batch.
-            batch_idx: Index of the batch.
-
-        Returns:
-            A dictionary containing 'probs', 'prediction_set', 'y_hat', and 'target'.
-        """
+        """Returns the Adaptive Prediction Set."""
         x, y, _ = batch
         logits = self.base_model(x)
         probs = torch.softmax(logits, dim=1)
-        cum_probs, sorted_indices = self._compute_scores(probs)
-
+        
         batch_size, K = probs.shape
         prediction_sets = torch.zeros(
             batch_size, K, dtype=torch.bool, device=probs.device
         )
-
-        for i in range(batch_size):
-            mask = cum_probs[i] <= self.q_hat
-            classes = sorted_indices[i, mask]
-            # Ensure at least the top class is included if q_hat is very small
-            if len(classes) == 0:
-                classes = sorted_indices[i, :1]
-            prediction_sets[i, classes] = True
+        
+        if self.class_wise:
+            aps_scores = self._compute_class_aps_scores(probs)
+            for i in range(batch_size):
+                for k in range(K):
+                    if aps_scores[i, k] <= self.q_hats[k]:
+                        prediction_sets[i, k] = True
+                # Ensure at least one class included if none
+                if prediction_sets[i].sum() == 0:
+                    _, top_class = torch.max(probs[i], 0)
+                    prediction_sets[i, top_class] = True
+        else:
+            # Original logic
+            sorted_probs, sorted_indices = torch.sort(probs, dim=1, descending=True)
+            cum_probs = torch.cumsum(sorted_probs, dim=1)
+            
+            for i in range(batch_size):
+                mask = cum_probs[i] <= self.q_hat
+                classes = sorted_indices[i, mask]
+                if len(classes) == 0:
+                    classes = sorted_indices[i, :1]
+                prediction_sets[i, classes] = True
 
         return {
             "probs": probs,
@@ -841,23 +914,23 @@ class OrdinalAPSWrapper(L.LightningModule):
         trained_model: L.LightningModule,
         num_classes: int = 5,
         alpha: float = 0.05,
+        class_wise: bool = False,
+        class_mapping: dict = None,
+        thresholds: list = None,
     ):
         super().__init__()
         self.base_model = trained_model
         self.alpha = alpha
-        self.register_buffer("q_hat", torch.tensor(1.0))
+        self.class_wise = class_wise
+        self.num_classes = num_classes
+        self.class_mapping = class_mapping or {"FQ": 0, "B": 1, "C": 2, "M": 3, "X": 4}
+        self.thresholds = thresholds or [2, 3, 4, 5]
+        
+        if self.class_wise:
+            self.register_buffer("q_hats", torch.ones(num_classes) * 1.0)
+        else:
+            self.register_buffer("q_hat", torch.tensor(1.0))
         self.test_uq_metrics = ClassificationUQMetrics(num_classes=num_classes)
-
-    def forward(self, x):
-        """Forward pass using the base model.
-
-        Args:
-            x: Input tensor.
-
-        Returns:
-            Model logits.
-        """
-        return self.base_model(x)
 
     def _get_all_intervals_max_probs(self, probs):
         B, K = probs.shape
@@ -874,6 +947,21 @@ class OrdinalAPSWrapper(L.LightningModule):
             I_start[:, s - 1] = start_idx
         return P, I_start
 
+    def _compute_all_class_scores(self, probs):
+        P, I_start = self._get_all_intervals_max_probs(probs)
+        B, K = probs.shape
+        
+        class_scores = torch.full((B, K), 1.5, device=probs.device)
+        
+        for s in range(1, K + 1):
+            start = I_start[:, s - 1]
+            end = start + s - 1
+            for k in range(K):
+                mask = (k >= start) & (k <= end)
+                class_scores[:, k] = torch.where(mask & (P[:, s - 1] < class_scores[:, k]), P[:, s - 1], class_scores[:, k])
+        return class_scores
+
+
     def _compute_score(self, probs, y):
         P, I_start = self._get_all_intervals_max_probs(probs)
         B, K = probs.shape
@@ -886,14 +974,13 @@ class OrdinalAPSWrapper(L.LightningModule):
         return scores
 
     def calibrate(self, dataloader):
-        """Runs calibration to find the scalar 'q_hat'.
-
-        Args:
-            dataloader: DataLoader for the calibration set.
-        """
+        """Runs calibration to find the scalar 'q_hat'."""
         lgr_logger.info("Starting Ordinal APS Calibration...")
         self.base_model.eval()
-        all_scores = []
+        if self.class_wise:
+            class_scores = [[] for _ in range(self.num_classes)]
+        else:
+            all_scores = []
         device = self.device
         with torch.no_grad():
             for batch in dataloader:
@@ -901,40 +988,62 @@ class OrdinalAPSWrapper(L.LightningModule):
                 x, y = x.to(device), y.to(device)
                 logits = self.base_model(x)
                 probs = torch.softmax(logits, dim=1)
-                scores = self._compute_score(probs, y)
-                all_scores.append(scores)
-        all_scores = torch.cat(all_scores)
-        n = len(all_scores)
-        q_level = np.ceil((n + 1) * (1 - self.alpha)) / n
-        q_level = min(1.0, max(0.0, q_level))
-        self.q_hat = torch.quantile(all_scores, q_level)
-        lgr_logger.info(
-            f"Ordinal APS Calibration Complete. Q_hat = {self.q_hat.item():.4f}"
-        )
+                
+                if self.class_wise:
+                    all_class_scores = self._compute_all_class_scores(probs)
+                    for i in range(len(y)):
+                        class_scores[y[i].item()].append(all_class_scores[i, y[i]].item())
+                else:
+                    scores = self._compute_score(probs, y)
+                    all_scores.append(scores)
+        
+        if self.class_wise:
+            for i in range(self.num_classes):
+                if len(class_scores[i]) > 0:
+                    scores_tensor = torch.tensor(class_scores[i], device=device)
+                    n = len(scores_tensor)
+                    q_level = np.ceil((n + 1) * (1 - self.alpha)) / n
+                    q_level = min(1.0, max(0.0, q_level))
+                    self.q_hats[i] = torch.quantile(scores_tensor, q_level)
+                else:
+                    lgr_logger.warning(f"Class {i} has no samples. Using 1.5.")
+                    self.q_hats[i] = 1.5
+            lgr_logger.info(f"Calibration Complete. Q_hats = {self.q_hats}")
+        else:
+            all_scores = torch.cat(all_scores)
+            n = len(all_scores)
+            q_level = np.ceil((n + 1) * (1 - self.alpha)) / n
+            q_level = min(1.0, max(0.0, q_level))
+            self.q_hat = torch.quantile(all_scores, q_level)
+            lgr_logger.info(f"Calibration Complete. Q_hat = {self.q_hat.item():.4f}")
 
     def predict_step(self, batch, batch_idx):
-        """Returns the Ordinal Adaptive Prediction Set.
-
-        Args:
-            batch: The input batch.
-            batch_idx: Index of the batch.
-
-        Returns:
-            A dictionary containing 'probs', 'prediction_set', 'y_hat', and 'target'.
-        """
+        """Returns the Ordinal Adaptive Prediction Set."""
         x, y, _ = batch
         logits = self.base_model(x)
         probs = torch.softmax(logits, dim=1)
-        P, I_start = self._get_all_intervals_max_probs(probs)
-
+        
         B, K = probs.shape
         prediction_sets = torch.zeros(B, K, dtype=torch.bool, device=probs.device)
-        for s in range(1, K + 1):
-            mask = P[:, s - 1] <= self.q_hat
+        
+        if self.class_wise:
+            all_class_scores = self._compute_all_class_scores(probs)
             for i in range(B):
-                if mask[i]:
-                    start = I_start[i, s - 1]
-                    prediction_sets[i, start : start + s] = True
+                for k in range(K):
+                    if all_class_scores[i, k] <= self.q_hats[k]:
+                        prediction_sets[i, k] = True
+                # Ensure at least one class included if none
+                if prediction_sets[i].sum() == 0:
+                    _, top_class = torch.max(probs[i], 0)
+                    prediction_sets[i, top_class] = True
+        else:
+            P, I_start = self._get_all_intervals_max_probs(probs)
+            for s in range(1, K + 1):
+                mask = P[:, s - 1] <= self.q_hat
+                for i in range(B):
+                    if mask[i]:
+                        start = I_start[i, s - 1]
+                        prediction_sets[i, start : start + s] = True
 
         return {
             "probs": probs,
