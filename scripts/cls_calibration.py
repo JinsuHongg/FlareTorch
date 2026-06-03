@@ -100,38 +100,40 @@ def run_uc_cal(cfg):
         alpha = cfg.uc.significance_level
         num_classes = cfg.uc.num_classes
         class_wise = cfg.uc.get("class_wise", False)
-        class_mapping = cfg.uc.get("class_mapping", {"FQ": 0, "B": 1, "C": 2, "M": 3, "X": 4})
+        class_mapping = cfg.uc.get(
+            "class_mapping", {"FQ": 0, "B": 1, "C": 2, "M": 3, "X": 4}
+        )
         thresholds = cfg.uc.get("thresholds", [2, 3, 4, 5])
-        
+
         wrapper = None
 
         match method_name:
             case "lac":
                 wrapper = ClsCPWrapper(
-                    trained_model=model, 
-                    num_classes=num_classes, 
+                    trained_model=model,
+                    num_classes=num_classes,
                     alpha=alpha,
                     class_wise=class_wise,
                     class_mapping=class_mapping,
-                    thresholds=thresholds
+                    thresholds=thresholds,
                 )
             case "aps":
                 wrapper = APSWrapper(
-                    trained_model=model, 
-                    num_classes=num_classes, 
+                    trained_model=model,
+                    num_classes=num_classes,
                     alpha=alpha,
                     class_wise=class_wise,
                     class_mapping=class_mapping,
-                    thresholds=thresholds
+                    thresholds=thresholds,
                 )
             case "oaps":
                 wrapper = OrdinalAPSWrapper(
-                    trained_model=model, 
-                    num_classes=num_classes, 
+                    trained_model=model,
+                    num_classes=num_classes,
                     alpha=alpha,
                     class_wise=class_wise,
                     class_mapping=class_mapping,
-                    thresholds=thresholds
+                    thresholds=thresholds,
                 )
             case _:
                 raise ValueError(f"Unknown method: {method_name}")
@@ -186,7 +188,7 @@ def run_uc_cal(cfg):
         # Construct the path using the method name and alpha value from config
         path = os.path.join(
             cfg.uc.csv_path,
-            f"{method}_alpha{cfg.uc.significance_level}_result_testset.csv",
+            f"{method}_alpha{cfg.uc.significance_level}_classwise{cfg.uc.class_wise}_result_testset.csv",
         )
         for i, batch_res in enumerate(preds):
             save_batch_to_csv(path, batch_res, header_written=(i > 0))
