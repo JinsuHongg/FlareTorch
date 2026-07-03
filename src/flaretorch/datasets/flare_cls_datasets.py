@@ -1,19 +1,15 @@
-import dask.array as da
 import hydra
 import numpy as np
 import pandas as pd
+import torch
 import xarray as xr
 import zarr
-
-import torch
-from torchvision import transforms
-from torch.utils.data import Dataset
-from torchvision.io import read_image
-
 from loguru import logger as lgr_logger
 from omegaconf import OmegaConf
-
 from terratorch_surya.datasets.helio import HelioNetCDFDataset
+from torch.utils.data import Dataset
+from torchvision import transforms
+from torchvision.io import read_image
 
 
 class FlareHelioviewerRegDataset(Dataset):
@@ -253,8 +249,10 @@ class FlareSuryaBenchDataset(Dataset):
         label_type: str,
         target_norm_type: str,
         phase: str,
+        channel: str = "hmi_m",
     ):
         super().__init__()
+        self.channel = channel
 
         # Find year groups from Zarr store
         root = zarr.open(input_zarr_path, mode="r")
@@ -264,12 +262,33 @@ class FlareSuryaBenchDataset(Dataset):
         self._arrays: dict[str, xr.DataArray] = {}
         for year in self.years:
             ds = xr.open_zarr(input_zarr_path, group=year)
-            self._arrays[year] = ds["hmi_m"]  # DataArray: (timestep, x, y)
+
+            # Support the new stacked Zarr structure
+            if "dataset" in ds:
+                da = ds["dataset"]
+                if "channel_names" in da.attrs:
+                    da = da.assign_coords(channel=da.attrs["channel_names"])
+
+                # Select the specific channel
+                da = da.sel(channel=self.channel)
+
+                # Ensure the time dimension is named 'timestep'
+                if "time" in da.dims:
+                    da = da.rename({"time": "timestep"})
+
+                self._arrays[year] = da
+            else:
+                # Fallback to old format
+                self._arrays[year] = ds[self.channel]
 
         # Build flat index — single concatenated DatetimeIndex
         index_timestamps = []
         for da in self._arrays.values():
-            index_timestamps.append(pd.DatetimeIndex(da.coords["timestep"].values))
+            if "timestep" in da.coords:
+                index_timestamps.append(pd.DatetimeIndex(da.coords["timestep"].values))
+            else:
+                lgr_logger.warning("No 'timestep' coordinates found in Zarr store!")
+                index_timestamps.append(pd.DatetimeIndex(range(len(da))))
         self.index_timestamps = pd.DatetimeIndex(np.concatenate(index_timestamps))
 
         self.input_time_delta = input_time_delta
@@ -520,7 +539,7 @@ class FlareSuryaClsDataset(HelioNetCDFDataset):
 
 @hydra.main(config_path="../../configs/", config_name="alexnet_helioviewer_config.yaml")
 def main(cfg):
-    dataset = FlareHelioviewerRegDataset(
+    FlareHelioviewerRegDataset(
         task=cfg.experiment.task,
         index_path=cfg.data.index_path.train,
         input_time_delta=cfg.data.input_time_delta,

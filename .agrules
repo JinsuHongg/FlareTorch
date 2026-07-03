@@ -1,0 +1,6 @@
+<RULE[project]>
+# Default Subagents
+When working in this repository, always define and invoke the `build` and `plan` subagents at the start of complex tasks by default.
+- The `build` subagent should be defined with `enable_write_tools=true` and used for implementation, file editing, and building applications.
+- The `plan` subagent should be defined with `enable_write_tools=false` and used for software design, research, and planning.
+</RULE[project]>
