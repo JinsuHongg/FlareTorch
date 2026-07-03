@@ -25,6 +25,7 @@ data:
   label_type: max_intensity
   limb_mask_path: ./assets/limb_mask.npy
   target_norm_type: log
+  channel: hmi_m
   # for dataloader
   num_workers: 6
   batch_size: 256

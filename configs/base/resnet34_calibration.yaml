@@ -25,6 +25,7 @@ data:
   label_type: max_intensity
   limb_mask_path: ../../assets/data/limb_mask.npy
   target_norm_type: log
+  channel: hmi_m
   scaler_mul: 1
   scaler_shift: -127.5
   scaler_div: 127.5

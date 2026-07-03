@@ -25,6 +25,7 @@ data:
   label_type: max_goes_class
   limb_mask_path: ./assets/limb_mask.npy
   target_norm_type: multi_class
+  channel: hmi_m
   # for dataloader
   num_workers: 6
   batch_size: 256

@@ -219,6 +219,7 @@ class FlareSuryaBenchDataModule(L.LightningDataModule):
             label_type=self.cfg.data.label_type,
             target_norm_type=self.cfg.data.target_norm_type,
             phase=phase,
+            channel=self.cfg.data.get("channel", "hmi_m"),
         )
 
     def setup(self, stage: str) -> None:
