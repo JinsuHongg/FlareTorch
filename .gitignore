@@ -10,6 +10,7 @@ logs/
 .vscode/
 .venv/
 tmp/
+shell_scripts/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
