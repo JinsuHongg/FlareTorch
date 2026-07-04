@@ -1,4 +1,5 @@
 import argparse
+import datetime
 import re
 import sys
 from collections import defaultdict
@@ -161,18 +162,29 @@ def process_and_write_batch(
             return True
 
         batch_data = []
+        batch_times = []
         for filepath in filepaths:
             tensor = process_single_file(filepath, var_names, target_size)
             batch_data.append(tensor)
-        data_array = np.concatenate(batch_data, axis=0)
 
-        # Write directly to Zarr
-        z = zarr.open(output_zarr_path, mode="r+")
+            match = re.search(r"(\d{8}_\d{4})", filepath.name)
+            if match:
+                dt = datetime.datetime.strptime(match.group(1), "%Y%m%d_%H%M")
+                ts_ns = int(dt.timestamp() * 1e9)
+            else:
+                ts_ns = 0
+            batch_times.append(ts_ns)
+
+        data_array = np.concatenate(batch_data, axis=0)
+        time_array = np.array(batch_times, dtype=np.int64)
+
+        # Write directly to Zarr Group
+        root = zarr.open_group(output_zarr_path, mode="r+")
         end_idx = start_idx + len(filepaths)
 
         # The chunk boundaries line up with batch_size, ensuring no race conditions
-        # as each task writes to disjoint chunk files.
-        z[start_idx:end_idx] = data_array  # type: ignore
+        root["images"][start_idx:end_idx] = data_array  # type: ignore
+        root["time"][start_idx:end_idx] = time_array  # type: ignore
 
         checkpoint_file.touch()
         return True
@@ -228,21 +240,32 @@ def main() -> None:
 
         if not Path(dataset_path).exists():
             logger.info(f"[{year}] Initializing new Zarr store at {dataset_path}")
-            z = zarr.open(
-                dataset_path,
-                mode="w",
+            root = zarr.open_group(dataset_path, mode="w")
+            
+            img_arr = root.create_dataset(
+                "images",
                 shape=(total_year_files, channels, args.target_size, args.target_size),
                 chunks=(args.batch_size, 1, args.target_size, args.target_size),
                 dtype="float32",
             )
-            z.attrs["channel_names"] = args.var_names
-            z.attrs["_ARRAY_DIMENSIONS"] = ["time", "channel", "y", "x"]
+            img_arr.attrs["channel_names"] = args.var_names
+            img_arr.attrs["_ARRAY_DIMENSIONS"] = ["time", "channel", "y", "x"]
+
+            time_arr = root.create_dataset(
+                "time",
+                shape=(total_year_files,),
+                chunks=(args.batch_size,),
+                dtype="i8",
+            )
+            time_arr.attrs["_ARRAY_DIMENSIONS"] = ["time"]
+            time_arr.attrs["units"] = "nanoseconds since 1970-01-01"
+            time_arr.attrs["calendar"] = "proleptic_gregorian"
         else:
             logger.info(
                 f"[{year}] Found existing Zarr store at {dataset_path}. Checking shape..."
             )
-            z = zarr.open(dataset_path, mode="r+")
-            if z.shape[0] != total_year_files:  # type: ignore
+            root = zarr.open_group(dataset_path, mode="r+")
+            if root["images"].shape[0] != total_year_files:  # type: ignore
                 logger.error(
                     f"[{year}] Existing Zarr store has different total shape. Cannot resume properly!"
                 )
