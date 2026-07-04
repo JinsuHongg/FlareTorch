@@ -5,9 +5,10 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
-import cv2
 import dask
 import numpy as np
+import torch
+import torch.nn.functional as F
 import xarray as xr
 import zarr
 from dask import delayed
@@ -115,9 +116,11 @@ def process_single_file(filepath: Path, var_names: list[str], target_size: int) 
                     data = ds[var].values.astype(np.float32)
                     if data.ndim == 3:
                         data = data.squeeze()
-                    resized = cv2.resize(
-                        data, (target_size, target_size), interpolation=cv2.INTER_AREA
+                    data_tensor = torch.from_numpy(data).unsqueeze(0).unsqueeze(0)
+                    resized_tensor = F.interpolate(
+                        data_tensor, size=(target_size, target_size), mode="area"
                     )
+                    resized = resized_tensor.squeeze().numpy()
                     channels.append(resized)
                 else:
                     channels.append(
