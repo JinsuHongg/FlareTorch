@@ -128,7 +128,7 @@ def process_single_file(filepath: Path, var_names: list[str], target_size: int) 
                     )
         return np.stack(channels, axis=0)[np.newaxis, ...]
     except Exception as e:
-        logger.warning(f"Failed to process {filepath}: {e}")
+        print(f"Failed to process {filepath}: {e}")
         return np.full(
             (1, len(var_names), target_size, target_size), np.nan, dtype=np.float32
         )
@@ -177,7 +177,7 @@ def process_and_write_batch(
         checkpoint_file.touch()
         return True
     except Exception as e:
-        logger.error(f"Error in batch starting at {start_idx}: {e}")
+        print(f"Error in batch starting at {start_idx}: {e}")
         return False
 
 
