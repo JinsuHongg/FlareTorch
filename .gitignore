@@ -1,5 +1,5 @@
 # etc
-data/
+/data/
 results/
 outputs/
 .hydra/
