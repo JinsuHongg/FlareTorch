@@ -212,9 +212,13 @@ def main() -> None:
         logger.info(f"Started local Dask cluster at {client.dashboard_link}")
 
     logger.info(f"Scanning {input_dir} for .nc files...")
-    files = sorted(input_dir.rglob("*.nc"))
+    all_files = sorted(input_dir.rglob("*.nc"))
+    
+    # Filter to only keep files with 1-hour cadence (minute is 00)
+    files = [f for f in all_files if re.search(r"\d{8}_\d{2}00\.nc", f.name)]
+    
     if not files:
-        logger.error("No .nc files found. Exiting.")
+        logger.error("No 1-hour cadence .nc files found (ending in 00.nc). Exiting.")
         return
 
     # Group files by year
