@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import dask
+import hdf5plugin  # Must be imported before xarray/h5netcdf to register compression plugins
 import numpy as np
 import torch
 import torch.nn.functional as F
