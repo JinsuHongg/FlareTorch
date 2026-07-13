@@ -261,24 +261,37 @@ class FlareSuryaBenchDataset(Dataset):
         # Open each year group as a lazy xarray DataArray
         self._arrays: dict[str, xr.DataArray] = {}
         for year in self.years:
-            ds = xr.open_zarr(input_zarr_path, group=year)
+            try:
+                # Support the new stacked Zarr structure (group: year/dataset, var: images)
+                ds = xr.open_zarr(input_zarr_path, group=f"{year}/dataset")
+                if "images" in ds:
+                    da = ds["images"]
+                    if "channel_names" in da.attrs:
+                        da = da.assign_coords(channel=da.attrs["channel_names"])
 
-            # Support the new stacked Zarr structure
+                    # Select the specific channel
+                    da = da.sel(channel=self.channel)
+
+                    # Ensure the time dimension is named 'timestep'
+                    if "time" in da.dims:
+                        da = da.rename({"time": "timestep"})
+
+                    self._arrays[year] = da
+                    continue
+            except Exception:
+                pass
+
+            # Fallback to old format
+            ds = xr.open_zarr(input_zarr_path, group=year)
             if "dataset" in ds:
                 da = ds["dataset"]
                 if "channel_names" in da.attrs:
                     da = da.assign_coords(channel=da.attrs["channel_names"])
-
-                # Select the specific channel
                 da = da.sel(channel=self.channel)
-
-                # Ensure the time dimension is named 'timestep'
                 if "time" in da.dims:
                     da = da.rename({"time": "timestep"})
-
                 self._arrays[year] = da
             else:
-                # Fallback to old format
                 self._arrays[year] = ds[self.channel]
 
         # Build flat index — single concatenated DatetimeIndex
